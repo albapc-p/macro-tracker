@@ -388,29 +388,50 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
   </div>
   <div id="guia-list"></div>
 </div>
-<!-- MODAL EDITAR DÍA -->
-<div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:none;align-items:center;justify-content:center;padding:1rem">
-  <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+<!-- MODAL DÍA -->
+<div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:flex-start;justify-content:center;padding:1rem;overflow-y:auto">
+  <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:420px;margin:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-      <span style="font-weight:600;font-size:15px" id="edit-modal-title">Editar día</span>
+      <span style="font-weight:600;font-size:15px" id="edit-modal-title">Día</span>
       <button class="btn btn-sm" onclick="closeEditModal()">✕</button>
     </div>
-    <div class="mini-grid three" style="margin-bottom:10px">
-      <div class="field"><label>Proteína (g)</label><input type="number" id="edit-prot" step="0.1"/></div>
-      <div class="field"><label>Kcal</label><input type="number" id="edit-kcal" step="1"/></div>
-      <div class="field"><label>Carbos (g)</label><input type="number" id="edit-carb" step="0.1"/></div>
+
+    <!-- Vista resumen -->
+    <div id="modal-view-summary">
+      <!-- Totales -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:1rem" id="modal-totals"></div>
+      <!-- Alimentos -->
+      <div style="margin-bottom:1rem">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Alimentos registrados</div>
+        <div id="modal-foods-list"></div>
+        <div id="modal-no-foods" style="display:none;font-size:12px;color:var(--text3);padding:8px 0">No se guardó el detalle de alimentos para este día</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" style="flex:1" onclick="showModalEdit()">✏️ Editar totales</button>
+        <button class="btn btn-danger" onclick="deleteDay()">🗑️ Borrar día</button>
+      </div>
     </div>
-    <div class="field" style="margin-bottom:1rem">
-      <label>¿Objetivo de proteína cumplido?</label>
-      <select id="edit-met">
-        <option value="auto">Calcular automáticamente</option>
-        <option value="si">Sí</option>
-        <option value="no">No</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" style="flex:1" onclick="saveEditDay()">💾 Guardar</button>
-      <button class="btn btn-danger" onclick="deleteDay()">🗑️ Borrar día</button>
+
+    <!-- Vista edición -->
+    <div id="modal-view-edit" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="field"><label>Proteína (g)</label><input type="number" id="edit-prot" step="0.1"/></div>
+        <div class="field"><label>Kcal</label><input type="number" id="edit-kcal" step="1"/></div>
+        <div class="field"><label>Carbohidratos (g)</label><input type="number" id="edit-carb" step="0.1"/></div>
+        <div class="field"><label>Grasas (g)</label><input type="number" id="edit-fat" step="0.1"/></div>
+      </div>
+      <div class="field" style="margin-bottom:1rem">
+        <label>¿Objetivo cumplido?</label>
+        <select id="edit-met">
+          <option value="auto">Calcular automáticamente</option>
+          <option value="si">Sí</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveEditDay()">💾 Guardar</button>
+        <button class="btn" onclick="showModalSummary()">← Volver</button>
+      </div>
     </div>
   </div>
 </div>
@@ -792,7 +813,7 @@ function renderSummary(){
 }
 function logToday(){
   const t=tots(),key=tKey();
-  dailyLog[key]={protein:Math.round(t.protein*10)/10,kcal:Math.round(t.kcal),carbs:Math.round(t.carbs*10)/10,met:t.protein>=cfg.prot};
+  dailyLog[key]={protein:Math.round(t.protein*10)/10,kcal:Math.round(t.kcal),carbs:Math.round(t.carbs*10)/10,fat:Math.round(t.fat*10)/10,sugar:Math.round(t.sugar*10)/10,met:t.protein>=cfg.prot,foods:[...todayFoods]};
   save();renderCalendar();
   alert(t.protein>=cfg.prot?`✅ ¡Objetivo cumplido! ${Math.round(t.protein*10)/10}g proteína`:`📝 Registrado: ${Math.round(t.protein*10)/10}g prot · ${Math.round(t.kcal)} kcal`);
 }
@@ -1100,17 +1121,91 @@ function renderGuia(){
 }
 
 
-// ── EDIT DAY MODAL ──
+// ── DAY MODAL ──
 let editingKey = null;
+
 function openEditModal(key){
   editingKey = key;
   const l = dailyLog[key];
-  document.getElementById('edit-modal-title').textContent = 'Editar día: ' + key;
+  // Format date nicely
+  const [y,m,d] = key.split('-');
+  const dateObj = new Date(+y,+m-1,+d);
+  const dateStr = dateObj.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('edit-modal-title').textContent = dateStr;
+
+  // Totals
+  const totalsEl = document.getElementById('modal-totals');
+  if(l){
+    const met = l.met;
+    totalsEl.innerHTML = `
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Proteína</div>
+        <div style="font-size:18px;font-weight:700;color:var(--blue)">${l.protein||0}g</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Kcal</div>
+        <div style="font-size:18px;font-weight:700">${l.kcal||0}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Carbos</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green)">${l.carbs||0}g</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Grasas</div>
+        <div style="font-size:18px;font-weight:700;color:var(--coral)">${l.fat||0}g</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Azúcares</div>
+        <div style="font-size:18px;font-weight:700;color:var(--pink)">${l.sugar||0}g</div>
+      </div>
+      <div style="background:${met?'var(--green-bg)':'var(--red-bg)'};border-radius:var(--radius-sm);padding:10px;text-align:center;border:1px solid ${met?'var(--green-border)':'var(--red-border)'}">
+        <div style="font-size:10px;color:${met?'var(--green)':'var(--red)'};margin-bottom:3px">Objetivo</div>
+        <div style="font-size:16px;font-weight:700;color:${met?'var(--green)':'var(--red)'}">${met?'✅ Sí':'❌ No'}</div>
+      </div>`;
+  } else {
+    totalsEl.innerHTML = '<div style="font-size:13px;color:var(--text3);grid-column:1/-1;padding:8px 0">Sin datos registrados</div>';
+  }
+
+  // Foods list
+  const foodsEl = document.getElementById('modal-foods-list');
+  const noFoodsEl = document.getElementById('modal-no-foods');
+  if(l && l.foods && l.foods.length){
+    noFoodsEl.style.display = 'none';
+    foodsEl.innerHTML = l.foods.map(f=>`
+      <div style="padding:8px 0;border-bottom:.5px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <span style="font-size:13px;font-weight:500;flex:1">${f.name}</span>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:flex-end">
+          ${f.unknown?'<span style="font-size:10px;color:var(--text3)">sin datos</span>':`
+            <span class="pill p-kcal" style="font-size:10px">${f.kcal}kcal</span>
+            <span class="pill p-prot" style="font-size:10px">${f.protein}g P</span>
+            <span class="pill p-fat" style="font-size:10px">${f.fat}g G</span>
+            <span class="pill p-carb" style="font-size:10px">${f.carbs}g C</span>
+            <span class="pill p-sugar" style="font-size:10px">${f.sugar}g Az</span>
+          `}
+        </div>
+      </div>`).join('');
+  } else {
+    noFoodsEl.style.display = 'block';
+    foodsEl.innerHTML = '';
+  }
+
+  showModalSummary();
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function showModalSummary(){
+  document.getElementById('modal-view-summary').style.display = 'block';
+  document.getElementById('modal-view-edit').style.display = 'none';
+}
+function showModalEdit(){
+  const l = dailyLog[editingKey];
   document.getElementById('edit-prot').value = l ? l.protein||'' : '';
   document.getElementById('edit-kcal').value = l ? l.kcal||'' : '';
   document.getElementById('edit-carb').value = l ? l.carbs||'' : '';
+  document.getElementById('edit-fat').value = l ? l.fat||'' : '';
   document.getElementById('edit-met').value = 'auto';
-  document.getElementById('edit-modal').style.display = 'flex';
+  document.getElementById('modal-view-summary').style.display = 'none';
+  document.getElementById('modal-view-edit').style.display = 'block';
 }
 function closeEditModal(){
   document.getElementById('edit-modal').style.display = 'none';
@@ -1121,9 +1216,11 @@ function saveEditDay(){
   const prot = parseFloat(document.getElementById('edit-prot').value)||0;
   const kcal = parseFloat(document.getElementById('edit-kcal').value)||0;
   const carbs = parseFloat(document.getElementById('edit-carb').value)||0;
+  const fat = parseFloat(document.getElementById('edit-fat').value)||0;
   const metSel = document.getElementById('edit-met').value;
   const met = metSel==='si' ? true : metSel==='no' ? false : prot >= cfg.prot;
-  dailyLog[editingKey] = {protein:prot, kcal, carbs, met};
+  const existing = dailyLog[editingKey] || {};
+  dailyLog[editingKey] = {...existing, protein:prot, kcal, carbs, fat, met};
   save(); renderCalendar(); closeEditModal();
 }
 function deleteDay(){
