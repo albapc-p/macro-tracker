@@ -109,10 +109,6 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
 .myf-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
 .myf-name{font-weight:600;font-size:14px;}
 
-/* Foto etiqueta */
-.photo-area{border:2px dashed var(--border2);border-radius:var(--radius);padding:1.5rem;text-align:center;cursor:pointer;color:var(--text2);font-size:13px;margin-bottom:10px;transition:all .15s;}
-.photo-area:hover{border-color:var(--blue);color:var(--blue);}
-.photo-preview{max-width:100%;border-radius:var(--radius-sm);margin-bottom:10px;display:none;}
 
 /* Calendar */
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
@@ -179,7 +175,6 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
     <div class="add-tabs">
       <button class="add-tab active" onclick="switchAddTab('buscar')">🔍 Buscar</button>
       <button class="add-tab" onclick="switchAddTab('manual')">✏️ Manual (por 100g)</button>
-      <button class="add-tab" onclick="switchAddTab('foto')">📷 Foto etiqueta</button>
     </div>
 
     <!-- BUSCAR -->
@@ -216,37 +211,8 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
         </div>
       </div>
     </div>
-
-    <!-- FOTO -->
-    <div class="add-section" id="add-foto">
-      <div class="photo-area" id="photo-drop" onclick="document.getElementById('photo-input').click()">
-        📷 Toca para hacer foto o seleccionar imagen de la etiqueta nutricional
-      </div>
-      <img id="photo-preview" class="photo-preview"/>
-      <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="onPhotoSelected(event)"/>
-      <div id="photo-result" style="display:none">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Valores detectados (por 100g) — revisa y ajusta si hace falta:</div>
-        <div class="mini-grid three">
-          <div class="field"><label>Kcal</label><input type="number" id="ph-kcal" step="0.1"/></div>
-          <div class="field"><label>Proteína (g)</label><input type="number" id="ph-prot" step="0.1"/></div>
-          <div class="field"><label>Grasas (g)</label><input type="number" id="ph-fat" step="0.1"/></div>
-          <div class="field"><label>G. saturadas (g)</label><input type="number" id="ph-satfat" step="0.1"/></div>
-          <div class="field"><label>Carbohidratos (g)</label><input type="number" id="ph-carb" step="0.1"/></div>
-          <div class="field"><label>Azúcares (g)</label><input type="number" id="ph-sugar" step="0.1"/></div>
-        </div>
-        <div class="field" style="margin-bottom:8px"><label>Nombre</label><input type="text" id="ph-name" placeholder="Ej: Flan Mercadona"/></div>
-        <div class="mini-grid">
-          <div class="field"><label>Gramos consumidos</label><input type="number" id="ph-grams" placeholder="100" step="1"/></div>
-          <div style="display:flex;align-items:flex-end;gap:6px">
-            <button class="btn btn-primary" style="flex:1" onclick="addFromPhoto()">+ Añadir</button>
-            <button class="btn" style="flex:1" onclick="savePhotoAsCustom()">⭐ Guardar</button>
-          </div>
-        </div>
-      </div>
-      <div id="photo-loading" style="display:none;text-align:center;padding:1rem;color:var(--text2);font-size:13px">
-        <span class="spin">⚙️</span> Leyendo etiqueta con IA...
-      </div>
-      <div id="photo-error" style="display:none;color:var(--red);font-size:12px;margin-top:6px"></div>
+    </div>
+  </div>
     </div>
   </div>
 
@@ -508,6 +474,40 @@ const DB={
   'quinoa':{p:4.1,f:1.9,sf:0.2,c:21,s:0.9,k:120,por:80},
   'hummus':{p:7.9,f:9.6,sf:1,c:14,s:0.5,k:177,por:50},
   'proteina':{p:75,f:2,sf:0.5,c:5,s:2,k:380,por:30},
+  // Bebidas y medidas comunes
+  'zumo naranja natural':{p:0.7,f:0.2,sf:0,c:9,s:8,k:42,por:200},
+  'zumo naranja brick':{p:0.7,f:0.1,sf:0,c:11,s:10,k:50,por:200},
+  'zumo naranja':{p:0.7,f:0.2,sf:0,c:9,s:8,k:42,por:200},
+  'nectar naranja':{p:0.3,f:0.1,sf:0,c:16,s:15,k:65,por:200},
+  'zumo manzana natural':{p:0.1,f:0.1,sf:0,c:10,s:9,k:42,por:200},
+  'zumo manzana brick':{p:0.1,f:0.1,sf:0,c:12,s:11,k:50,por:200},
+  'zumo pina natural':{p:0.4,f:0.1,sf:0,c:10,s:9,k:50,por:200},
+  'zumo pina brick':{p:0.4,f:0.1,sf:0,c:12,s:11,k:55,por:200},
+  'zumo tomate':{p:0.8,f:0.1,sf:0,c:4,s:3.5,k:17,por:200},
+  'batido chocolate':{p:3.4,f:2,sf:1.2,c:11,s:10,k:70,por:200},
+  'batido fresa':{p:3.2,f:1.5,sf:0.9,c:11,s:10,k:65,por:200},
+  'leche entera vaso':{p:3.4,f:3.7,sf:2.4,c:4.8,s:4.8,k:61,por:200},
+  'leche desnatada':{p:3.4,f:0.1,sf:0.1,c:4.8,s:4.8,k:35,por:200},
+  'leche semidesnatada':{p:3.4,f:1.6,sf:1.0,c:4.8,s:4.8,k:46,por:200},
+  'bebida avena':{p:1,f:1.5,sf:0.2,c:6.6,s:4,k:40,por:200},
+  'bebida almendra':{p:0.5,f:1.1,sf:0.1,c:3,s:2.5,k:24,por:200},
+  'bebida soja':{p:3.3,f:1.8,sf:0.3,c:2.5,s:2,k:39,por:200},
+  'te':{p:0,f:0,sf:0,c:0,s:0,k:1,por:200},
+  'te verde':{p:0,f:0,sf:0,c:0,s:0,k:1,por:200},
+  'infusion':{p:0,f:0,sf:0,c:0,s:0,k:2,por:200},
+  'agua':{p:0,f:0,sf:0,c:0,s:0,k:0,por:200},
+  'refresco cola':{p:0,f:0,sf:0,c:10.6,s:10.6,k:42,por:330},
+  'refresco cola zero':{p:0,f:0,sf:0,c:0,s:0,k:1,por:330},
+  'cerveza':{p:0.5,f:0,sf:0,c:3.6,s:0,k:43,por:330},
+  'vino tinto':{p:0.1,f:0,sf:0,c:2.6,s:0.6,k:85,por:150},
+  'vino blanco':{p:0.1,f:0,sf:0,c:1.4,s:0.5,k:70,por:150},
+  // Medidas de cocina
+  'cucharada aceite':{p:0,f:14,sf:2,c:0,s:0,k:124,por:14},
+  'cucharada mantequilla':{p:0.1,f:11,sf:7,c:0,s:0,k:102,por:14},
+  'cucharada azucar':{p:0,f:0,sf:0,c:12.5,s:12.5,k:49,por:12},
+  'cucharada miel':{p:0.1,f:0,sf:0,c:17,s:16,k:64,por:21},
+  'cucharadita aceite':{p:0,f:4.5,sf:0.6,c:0,s:0,k:40,por:5},
+  'cucharadita azucar':{p:0,f:0,sf:0,c:4,s:4,k:16,por:4},
 };
 
 function norm(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim();}
@@ -578,7 +578,7 @@ function renderCustomFoods(){
     </div>`).join('');
 }
 
-// Guardar desde el panel manual/foto como alimento personalizado
+// Guardar desde el panel manual como alimento personalizado
 function saveManualAsCustom(){
   const n=document.getElementById('man-name').value.trim()||'Alimento personalizado';
   customFoods.push({id:'cf_'+Date.now(),name:n,
@@ -589,19 +589,6 @@ function saveManualAsCustom(){
     c:parseFloat(document.getElementById('man-carb').value)||0,
     s:parseFloat(document.getElementById('man-sugar').value)||0,
     por:parseFloat(document.getElementById('man-grams').value)||100,
-  });
-  save();renderCustomFoods();alert('✅ Guardado en Mis alimentos');
-}
-function savePhotoAsCustom(){
-  const n=document.getElementById('ph-name').value.trim()||'Alimento de etiqueta';
-  customFoods.push({id:'cf_'+Date.now(),name:n,
-    k:parseFloat(document.getElementById('ph-kcal').value)||0,
-    p:parseFloat(document.getElementById('ph-prot').value)||0,
-    f:parseFloat(document.getElementById('ph-fat').value)||0,
-    sf:parseFloat(document.getElementById('ph-satfat').value)||0,
-    c:parseFloat(document.getElementById('ph-carb').value)||0,
-    s:parseFloat(document.getElementById('ph-sugar').value)||0,
-    por:parseFloat(document.getElementById('ph-grams').value)||100,
   });
   save();renderCustomFoods();alert('✅ Guardado en Mis alimentos');
 }
@@ -710,62 +697,8 @@ function addManual(){
   save();renderFoods();renderSummary();
   ['man-name','man-kcal','man-prot','man-fat','man-satfat','man-carb','man-sugar','man-grams'].forEach(id=>document.getElementById(id).value='');
 }
-function addFromPhoto(){
-  const name=document.getElementById('ph-name').value.trim()||'Alimento de etiqueta';
-  const g=parseFloat(document.getElementById('ph-grams').value)||100;
-  const d={k:parseFloat(document.getElementById('ph-kcal').value)||0,p:parseFloat(document.getElementById('ph-prot').value)||0,f:parseFloat(document.getElementById('ph-fat').value)||0,sf:parseFloat(document.getElementById('ph-satfat').value)||0,c:parseFloat(document.getElementById('ph-carb').value)||0,s:parseFloat(document.getElementById('ph-sugar').value)||0};
-  todayFoods.push({name:`${name} (${g}g)`,...macrosFromData(d,g)});
-  save();renderFoods();renderSummary();
-}
 function removeFood(i){todayFoods.splice(i,1);save();renderFoods();renderSummary();}
 
-// ── PHOTO / AI ──
-let photoB64=null;
-function onPhotoSelected(e){
-  const file=e.target.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    photoB64=ev.target.result.split(',')[1];
-    const img=document.getElementById('photo-preview');
-    img.src=ev.target.result;img.style.display='block';
-    document.getElementById('photo-result').style.display='none';
-    document.getElementById('photo-error').style.display='none';
-    analyzeLabel();
-  };
-  reader.readAsDataURL(file);
-}
-async function analyzeLabel(){
-  document.getElementById('photo-loading').style.display='block';
-  document.getElementById('photo-error').style.display='none';
-  try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:500,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:photoB64}},
-          {type:'text',text:'Esta es una etiqueta nutricional. Extrae los valores POR CADA 100g. Responde SOLO con JSON sin markdown, con estas claves exactas: kcal, prot, fat, satfat, carb, sugar. Todos números decimales. Si no encuentras algún valor pon 0.'}
-        ]}]
-      })
-    });
-    const json=await resp.json();
-    const text=json.content?.[0]?.text||'{}';
-    const data=JSON.parse(text.replace(/```json|```/g,'').trim());
-    document.getElementById('ph-kcal').value=data.kcal||0;
-    document.getElementById('ph-prot').value=data.prot||0;
-    document.getElementById('ph-fat').value=data.fat||0;
-    document.getElementById('ph-satfat').value=data.satfat||0;
-    document.getElementById('ph-carb').value=data.carb||0;
-    document.getElementById('ph-sugar').value=data.sugar||0;
-    document.getElementById('photo-result').style.display='block';
-  }catch(err){
-    document.getElementById('photo-error').textContent='Error al leer la etiqueta: '+err.message+'. Puedes introducir los valores manualmente.';
-    document.getElementById('photo-error').style.display='block';
-    document.getElementById('photo-result').style.display='block';
-  }
-  document.getElementById('photo-loading').style.display='none';
-}
 
 // ── RENDER FOODS ──
 function renderFoods(){
@@ -775,7 +708,7 @@ function renderFoods(){
     <div class="food-item">
       <div class="food-item-top"><span class="food-name">${f.name}</span><button class="btn btn-danger btn-sm" onclick="removeFood(${i})">✕</button></div>
       <div class="pills">
-        ${f.unknown?'<span class="pill p-unk">No reconocido — usa el modo Manual o Foto</span>':`
+        ${f.unknown?'<span class="pill p-unk">No reconocido — usa el modo ✏️ Manual</span>':`
           <span class="pill p-kcal">${f.kcal} kcal</span>
           <span class="pill p-prot">${f.protein}g prot</span>
           <span class="pill p-fat">${f.fat}g grasa</span>
@@ -1022,6 +955,8 @@ const GUIA_CATS = {
   'Verduras': ['espinacas','lechuga','tomate','zanahoria','brocoli','setas','champinon','guisantes'],
   'Frutos secos y grasas': ['almendras','nueces','cacahuetes','hummus','aceite','mantequilla'],
   'Otros': ['cafe','datil','datiles','chocolate','tortilla'],
+  'Bebidas': ['zumo naranja natural','zumo naranja brick','nectar naranja','zumo manzana natural','zumo manzana brick','zumo pina natural','zumo pina brick','leche entera vaso','leche desnatada','leche semidesnatada','bebida avena','bebida almendra','bebida soja','te','infusion','agua','refresco cola','refresco cola zero','cerveza','vino tinto'],
+  'Medidas de cocina': ['cucharada aceite','cucharada mantequilla','cucharada azucar','cucharada miel','cucharadita aceite','cucharadita azucar'],
 };
 const GUIA_LABELS = {
   'huevo cocido':'Huevo cocido / duro',
@@ -1040,6 +975,9 @@ const GUIA_LABELS = {
 };
 const GUIA_NOTES = {
   'huevo cocido':'Un huevo M pesa ~60g, L ~70g, XL ~80g. Sin aceite añadido.',
+  'zumo naranja natural':'Exprimido en casa. Menos azúcar y más vitaminas que el industrial.',
+  'zumo naranja brick':'Don Simon, Minute Maid etc. Más azúcar por concentración. Aunque ponga sin azúcares añadidos.',
+  'nectar naranja':'Bebida de naranja con azúcar añadido. Similar a un refresco en azúcar.',
   'huevo frito':'Incluye ~5g de aceite absorbido. Mucho más calórico que cocido.',
   'huevo revuelto':'Varía según cantidad de aceite/mantequilla y leche usada.',
   pan:'Una rebanada de pan de molde pesa ~25-35g',
