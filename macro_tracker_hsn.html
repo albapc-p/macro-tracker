@@ -875,7 +875,7 @@ function exportExcel(){
   csv += '\n\nMEDIDAS SEMANALES\n';
   csv += 'Fecha,Peso (kg),Cintura (cm),Abdomen (cm),Cadera (cm),Brazo relajado (cm),Brazo contraído (cm),Muslo (cm),Pecho (cm)\n';
   for(const m of [...measures].sort((a,b)=>a.date.localeCompare(b.date))){
-    csv += `${m.date},${m.peso||''},${m.cintura||''},${m.abdomen||''},${m.cadera||''},${m.brazo||''},${m.brazoFlex||''},${m.muslo||''},${m.pecho||}\n`;
+    csv += `${m.date},${m.peso||''},${m.cintura||''},${m.abdomen||''},${m.cadera||''},${m.brazo||''},${m.brazoFlex||''},${m.muslo||''},${m.pecho||''}\n`;
   }
 
   csv += '\n\nMIS ALIMENTOS PERSONALIZADOS\n';
