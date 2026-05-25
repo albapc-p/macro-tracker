@@ -349,6 +349,25 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       Los valores son estimaciones de referencia basadas en raciones típicas. Un huevo "mediano" pesa ~60g, uno grande ~70g. Ajusta en el modo Manual si tu ración es diferente.
     </div>
   </div>
+  <div style="margin-bottom:1rem">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;margin-top:1rem">📐 Tabla de medidas caseras</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;font-size:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--surface2);padding:6px 10px;font-weight:600;color:var(--text2);font-size:11px">
+        <span>Medida</span><span>Equivalencia</span><span>Ejemplo de uso</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border)"><span>Cucharadita (cdta)</span><span>~5 ml / 5g</span><span>"1 cdta aceite"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border);background:var(--surface2)"><span>Cda. postre</span><span>~10 ml / 10g</span><span>"2 cucharadas postre yogur"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border)"><span>Cda. sopera (cda)</span><span>~15 ml / 15g</span><span>"3 cucharadas soperas arroz"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border);background:var(--surface2)"><span>Taza café</span><span>~50 ml</span><span>"1 taza cafe leche"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border)"><span>Vaso pequeño</span><span>~150 ml</span><span>"1 vaso pequeño zumo"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border);background:var(--surface2)"><span>Vaso / taza</span><span>~250 ml</span><span>"1 vaso kefir"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border)"><span>Vaso grande</span><span>~330 ml</span><span>"1 vaso grande leche"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border);background:var(--surface2)"><span>Tazón</span><span>~400 ml</span><span>"1 tazón avena"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border)"><span>Puñado</span><span>~30g</span><span>"1 puñado almendras"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border);background:var(--surface2)"><span>ml / cl / dl / l</span><span>directo</span><span>"200ml leche", "2dl zumo"</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;border-top:.5px solid var(--border)"><span>g / gr / kg</span><span>directo</span><span>"150g arroz", "0.5kg pollo"</span></div>
+    </div>
+  </div>
   <div id="guia-list"></div>
 </div>
 <!-- MODAL DÍA -->
@@ -519,6 +538,42 @@ function normStem(s){
 const DB_NORM={};for(const k of Object.keys(DB))DB_NORM[norm(k)]=k;
 
 const NUMS={una:1,un:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,media:0.5,medio:0.5};
+
+// Medidas caseras → gramos/ml aproximados
+const MEASURES={
+  // Cucharadas
+  'cucharada sopera':15,'cucharada grande':15,'cda':15,'cda sopera':15,
+  'cucharada postre':10,'cucharada mediana':10,'cda postre':10,
+  'cucharadita':5,'cucharada cafe':5,'cucharadita cafe':5,'cdta':5,'cda pequena':5,'cucharada pequeña':5,'cucharada peq':5,
+  // Vasos y tazas
+  'vaso':250,'vaso grande':330,'vaso pequeño':150,'vaso peq':150,
+  'taza':250,'taza cafe':50,'taza te':250,'taza grande':350,
+  'tazón':400,'tazon':400,
+  // Porciones
+  'ración':null,'racion':null, // null = usar la porción por defecto del alimento
+  'puñado':30,'punado':30,'puñadito':15,'punادito':15,
+  'pizca':1,
+  // Líquidos
+  'ml':1,'mililitro':1,'mililitros':1,
+  'cl':10,'centilitro':10,'centilitros':10,
+  'dl':100,'decilitro':100,'decilitros':100,
+  'l':1000,'litro':1000,'litros':1000,
+};
+
+// Detecta si el texto contiene una medida casera y devuelve {measure, grams, rest}
+function parseMeasure(t){
+  const tn = norm(t);
+  // Ordenar por longitud descendente para matchear primero las más específicas
+  const keys = Object.keys(MEASURES).sort((a,b)=>b.length-a.length);
+  for(const k of keys){
+    const kn = norm(k);
+    if(tn.startsWith(kn+' ')||tn===kn||tn.startsWith(kn+'s ')||tn===kn+'s'){
+      const rest = t.slice(k.length).replace(/^s?\s+(de\s+)?(la\s+|el\s+|los\s+|las\s+)?/i,'').trim();
+      return {measure:k, grams:MEASURES[k], rest};
+    }
+  }
+  return null;
+}
 const UNITS=['g','gr','gramos','kg'];
 
 // ── STATE ──
@@ -654,20 +709,55 @@ function macrosFromData(d,g){
 }
 function parseFood(raw){
   let t=raw.toLowerCase().trim(),qty=null,unit=null;
+
+  // Extraer cantidad numérica o textual
   for(const[k,v] of Object.entries(NUMS)){const re=new RegExp('\\b'+k+'\\b','i');if(re.test(t)){qty=v;t=t.replace(re,'').trim();break;}}
   const nm=t.match(/^(\d+(?:[.,]\d+)?)\s*/);
   if(nm){qty=parseFloat(nm[1].replace(',','.'));t=t.slice(nm[0].length).trim();}
+
+  // Detectar unidades estándar (g, kg, ml, etc.)
   for(const u of UNITS){if(t.startsWith(u+' ')||t===u){unit=u;t=t.slice(u.length).trim();break;}}
-  if(!unit){const um=t.match(/\s+(g|gr|gramos|kg)\b/i);if(um){unit=um[1].toLowerCase();t=t.replace(um[0],'').trim();}}
+  if(!unit){const um=t.match(/\s+(g|gr|gramos|kg|ml|mililitros?|cl|dl|l|litros?)\b/i);if(um){unit=um[1].toLowerCase();t=t.replace(um[0],'').trim();}}
+
+  // Detectar medidas caseras (cucharada, vaso, taza...)
+  let measureGrams=null,measureName=null;
+  if(!unit){
+    const m=parseMeasure(t);
+    if(m){
+      measureName=m.measure;
+      measureGrams=m.grams;
+      t=m.rest;
+    }
+  }
+
   t=t.replace(/^(de |la |el |los |las |un |una )/i,'').trim();
   const found=dbLookup(t);
   if(found){
     const d=found.data;
-    if(unit==='kg')qty=(qty||1)*1000;
-    let g;
-    if(UNITS.includes(unit)){g=qty||100;unit='g';}
-    else{g=(qty||1)*(d.por||100);qty=qty||1;unit='ración';}
-    return{name:raw,...macrosFromData(d,g)};
+    let g,unitLabel;
+    if(unit==='kg'){g=(qty||1)*1000;unitLabel='g';}
+    else if(unit&&['ml','mililitro','mililitros','cl','centilitro','centilitros','dl','decilitro','decilitros','l','litro','litros'].includes(unit)){
+      // Para líquidos: ml ≈ g (densidad ~1)
+      const factor=unit==='cl'?10:unit==='dl'?100:(unit==='l'||unit==='litro'||unit==='litros')?1000:1;
+      g=(qty||1)*factor;unitLabel=unit;
+    }
+    else if(unit&&['g','gr','gramos'].includes(unit)){
+      g=qty||100;unitLabel='g';
+    }
+    else if(measureGrams!==null){
+      // Medida casera con gramos conocidos
+      g=(qty||1)*measureGrams;
+      unitLabel=(qty&&qty!==1?qty+' ':'')+measureName+'s';
+    }
+    else if(measureGrams===null&&measureName){
+      // Medida tipo "ración" → usar porción por defecto
+      g=(qty||1)*(d.por||100);unitLabel='ración';
+    }
+    else{
+      // Sin unidad → ración por defecto
+      g=(qty||1)*(d.por||100);qty=qty||1;unitLabel='ración';
+    }
+    return{name:raw,...macrosFromData(d,g),unitLabel};
   }
   return{name:raw,kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0,unknown:true};
 }
