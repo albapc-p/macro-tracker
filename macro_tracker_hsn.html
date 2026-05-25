@@ -539,37 +539,44 @@ const DB_NORM={};for(const k of Object.keys(DB))DB_NORM[norm(k)]=k;
 
 const NUMS={una:1,un:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,media:0.5,medio:0.5};
 
-// Medidas caseras → gramos/ml aproximados
-const MEASURES={
-  // Cucharadas
-  'cucharada sopera':15,'cucharada grande':15,'cda':15,'cda sopera':15,
-  'cucharada postre':10,'cucharada mediana':10,'cda postre':10,
-  'cucharadita':5,'cucharada cafe':5,'cucharadita cafe':5,'cdta':5,'cda pequena':5,'cucharada pequeña':5,'cucharada peq':5,
-  // Vasos y tazas
-  'vaso':250,'vaso grande':330,'vaso pequeño':150,'vaso peq':150,
-  'taza':250,'taza cafe':50,'taza te':250,'taza grande':350,
-  'tazón':400,'tazon':400,
-  // Porciones
-  'ración':null,'racion':null, // null = usar la porción por defecto del alimento
-  'puñado':30,'punado':30,'puñadito':15,'punادito':15,
-  'pizca':1,
-  // Líquidos
-  'ml':1,'mililitro':1,'mililitros':1,
-  'cl':10,'centilitro':10,'centilitros':10,
-  'dl':100,'decilitro':100,'decilitros':100,
-  'l':1000,'litro':1000,'litros':1000,
-};
+// Medidas caseras → gramos/ml aproximados (en singular, el sistema maneja plurales)
+const MEASURES_LIST=[
+  // Específicas primero (más largas), luego genéricas
+  {k:'cucharada sopera',   g:15},  {k:'cucharada grande',  g:15},
+  {k:'cda sopera',         g:15},  {k:'cda grande',        g:15},
+  {k:'cucharada postre',   g:10},  {k:'cucharada mediana', g:10},
+  {k:'cda postre',         g:10},  {k:'cda mediana',       g:10},
+  {k:'cucharada pequeña',  g:5},   {k:'cucharada pequena', g:5},
+  {k:'cucharada cafe',     g:5},   {k:'cucharadita cafe',  g:5},
+  {k:'cucharadita',        g:5},   {k:'cdta',              g:5},
+  {k:'cucharada',          g:15},  {k:'cda',               g:15},
+  {k:'vaso pequeño',       g:150}, {k:'vaso pequeno',      g:150},
+  {k:'vaso peq',           g:150},
+  {k:'vaso grande',        g:330},
+  {k:'vaso',               g:250},
+  {k:'taza cafe',          g:50},  {k:'taza te',           g:250},
+  {k:'taza grande',        g:350},
+  {k:'taza',               g:250},
+  {k:'tazón',              g:400}, {k:'tazon',             g:400},
+  {k:'puñadito',           g:15},  {k:'punadito',          g:15},
+  {k:'puñado',             g:30},  {k:'punado',            g:30},
+  {k:'ración',             g:null},{k:'racion',            g:null},
+  {k:'pizca',              g:1},
+];
 
-// Detecta si el texto contiene una medida casera y devuelve {measure, grams, rest}
+// Detecta medida casera ignorando plurales y tildes
 function parseMeasure(t){
   const tn = norm(t);
-  // Ordenar por longitud descendente para matchear primero las más específicas
-  const keys = Object.keys(MEASURES).sort((a,b)=>b.length-a.length);
-  for(const k of keys){
+  for(const {k,g} of MEASURES_LIST){
     const kn = norm(k);
-    if(tn.startsWith(kn+' ')||tn===kn||tn.startsWith(kn+'s ')||tn===kn+'s'){
-      const rest = t.slice(k.length).replace(/^s?\s+(de\s+)?(la\s+|el\s+|los\s+|las\s+)?/i,'').trim();
-      return {measure:k, grams:MEASURES[k], rest};
+    // Acepta singular, plural con -s, plural con -as, plural con -es
+    const variants = [kn, kn+'s', kn+'as', kn+'es'];
+    for(const v of variants){
+      if(tn.startsWith(v+' ') || tn===v){
+        // Quitar la medida del texto + "de/del/la/el" opcionales
+        const rest = t.slice(v.length).replace(/^\s*(de[l]?\s+)?(la\s+|el\s+|los\s+|las\s+|un\s+|una\s+)?/i,'').trim();
+        return {measure:k, grams:g, rest};
+      }
     }
   }
   return null;
