@@ -425,10 +425,15 @@ const HSN=0.92;
 const DB={
   'huevo':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
   'huevo cocido':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
+  'huevos cocidos':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
   'huevo duro':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
+  'huevos duros':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
   'huevo frito':{p:12.4,f:14.8,sf:2.9,c:0.6,s:0.3,k:196,por:60},
+  'huevos fritos':{p:12.4,f:14.8,sf:2.9,c:0.6,s:0.3,k:196,por:60},
   'huevo revuelto':{p:10.6,f:10.2,sf:3.1,c:1.2,s:0.5,k:148,por:60},
+  'huevos revueltos':{p:10.6,f:10.2,sf:3.1,c:1.2,s:0.5,k:148,por:60},
   'huevo pochado':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
+  'huevos pochados':{p:12.6,f:9.5,sf:2.7,c:1.1,s:1.0,k:155,por:60},
   'pechuga':{p:31,f:3.6,sf:1.0,c:0,s:0,k:165,por:150},
   'pollo':{p:27,f:6,sf:1.7,c:0,s:0,k:165,por:150},
   'pavo':{p:29,f:1,sf:0.3,c:0,s:0,k:135,por:150},
@@ -485,6 +490,12 @@ const DB={
 };
 
 function norm(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim();}
+// Versión sin plural para matching flexible
+function normStem(s){
+  const n=norm(s);
+  // Quitar plurales comunes en español: -os, -as, -es, -s
+  return n.replace(/os$|as$|es$|s$/,'');
+}
 const DB_NORM={};for(const k of Object.keys(DB))DB_NORM[norm(k)]=k;
 
 const NUMS={una:1,un:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,media:0.5,medio:0.5};
@@ -608,12 +619,25 @@ function closeAC(){document.getElementById('ac-list').style.display='none';}
 // ── PARSE ──
 function dbLookup(t){
   const tn=norm(t);
+  const ts=normStem(t);
+  // 1. Exact normalized match
   if(DB_NORM[tn])return{src:'db',data:DB[DB_NORM[tn]]};
-  // custom foods
-  for(const cf of customFoods){if(norm(cf.name).includes(tn)||tn.includes(norm(cf.name)))return{src:'custom',data:cf};}
+  // 2. Stem match (ignores plurals)
+  for(const[kn,korig] of Object.entries(DB_NORM)){
+    if(normStem(kn)===ts)return{src:'db',data:DB[korig]};
+  }
+  // 3. Custom foods — exact or stem
+  for(const cf of customFoods){
+    const cn=norm(cf.name),cs=normStem(cf.name);
+    if(cn===tn||cs===ts||cn.includes(tn)||tn.includes(cn))return{src:'custom',data:cf};
+  }
+  // 4. Substring match (longest key wins)
   let best=null,bestLen=0;
   for(const[kn,korig] of Object.entries(DB_NORM)){
-    if((tn.includes(kn)||kn.includes(tn))&&kn.length>bestLen){best=DB[korig];bestLen=kn.length;}
+    const ks=normStem(kn);
+    if((tn.includes(kn)||kn.includes(tn)||ts.includes(ks)||ks.includes(ts))&&kn.length>bestLen){
+      best=DB[korig];bestLen=kn.length;
+    }
   }
   return best?{src:'db',data:best}:null;
 }
