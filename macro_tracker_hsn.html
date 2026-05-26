@@ -285,6 +285,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
     <span><span class="dot-sm" style="background:var(--green)"></span>Objetivo cumplido</span>
     <span><span class="dot-sm" style="background:var(--red)"></span>No cumplido</span>
     <span><span class="dot-sm" style="background:var(--border2)"></span>Sin registrar</span>
+    <span><span class="dot-sm" style="background:var(--purple)"></span>Con medidas corporales</span>
   </div>
   <div class="streak" id="streak"></div>
   <div class="stats-grid" id="cal-stats"></div>
@@ -440,17 +441,24 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
 
     <!-- Vista resumen -->
     <div id="modal-view-summary">
-      <!-- Totales -->
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:1rem" id="modal-totals"></div>
-      <!-- Alimentos -->
-      <div style="margin-bottom:1rem">
-        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Alimentos registrados</div>
+      <!-- Nav buttons -->
+      <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
+        <button class="btn btn-sm" id="modal-btn-foods" onclick="showModalFoods()" style="flex:1">🍽️ Alimentos</button>
+        <button class="btn btn-sm" id="modal-btn-measures" onclick="showModalMeasures()" style="flex:1">📏 Medidas</button>
+        <button class="btn btn-sm" onclick="showModalEdit()" style="flex:1">✏️ Editar</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteDay()">🗑️</button>
+      </div>
+      <!-- Alimentos subview -->
+      <div id="modal-sub-foods">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Alimentos del día</div>
         <div id="modal-foods-list"></div>
         <div id="modal-no-foods" style="display:none;font-size:12px;color:var(--text3);padding:8px 0">No se guardó el detalle de alimentos para este día</div>
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn" style="flex:1" onclick="showModalEdit()">✏️ Editar totales</button>
-        <button class="btn btn-danger" onclick="deleteDay()">🗑️ Borrar día</button>
+      <!-- Medidas subview -->
+      <div id="modal-sub-measures" style="display:none">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Medidas corporales</div>
+        <div id="modal-measures-content"></div>
       </div>
     </div>
 
@@ -741,6 +749,8 @@ function save(){
   try{
     localStorage.setItem('mth_state',JSON.stringify({dailyLog,measures,cfg,customFoods}));
     localStorage.setItem('mth_today_'+tKey(),JSON.stringify(todayFoods));
+    localStorage.setItem('mth_hsn_taken',hsnTaken?'1':'0');
+    localStorage.setItem('mth_hsn_date',tKey());
   }catch(e){}
   autoDriveSave();
 }
@@ -811,6 +821,37 @@ function pickAC(name){
 }
 function closeAC(){document.getElementById('ac-list').style.display='none';}
 
+
+// ── HSN TAKEN ──
+let hsnTaken = false;
+function toggleHsnTaken(){
+  hsnTaken = !hsnTaken;
+  const btn = document.getElementById('hsn-taken-btn');
+  const msg = document.getElementById('hsn-taken-msg');
+  const box = document.getElementById('hsn-box');
+  if(hsnTaken){
+    btn.style.background='var(--green)';btn.style.borderColor='var(--green)';
+    btn.style.color='#fff';btn.textContent='✓ Tomado';
+    msg.style.display='block';
+    box.style.background='var(--green-bg)';box.style.borderColor='var(--green-border)';
+  } else {
+    btn.style.background='transparent';btn.style.borderColor='var(--blue)';
+    btn.style.color='var(--blue)';btn.textContent='✓ Marcar como tomado';
+    msg.style.display='none';
+    box.style.background='';box.style.borderColor='';
+  }
+  renderSummary();
+}
+function resetHsnTaken(){
+  hsnTaken=false;
+  const btn=document.getElementById('hsn-taken-btn');
+  const msg=document.getElementById('hsn-taken-msg');
+  const box=document.getElementById('hsn-box');
+  if(btn){btn.style.background='transparent';btn.style.borderColor='var(--blue)';btn.style.color='var(--blue)';btn.textContent='✓ Marcar como tomado';}
+  if(msg) msg.style.display='none';
+  if(box){box.style.background='';box.style.borderColor='';}
+}
+
 // ── ADD FOOD ──
 function addFood(){
   closeAC();
@@ -877,6 +918,15 @@ function renderSummary(){
   setBar('b-carb',t.carbs/cfg.carb*100,'#639922');
   document.getElementById('v-sugar').innerHTML=r(t.sugar)+'g <span style="font-weight:400;color:var(--text3)">(máx '+cfg.sugar+')</span>';
   const needed=Math.max(0,cfg.prot-t.protein),hsnG=needed/HSN;
+  const effectiveProt = t.protein + (hsnTaken ? Math.min(hsnG,needed)*HSN : 0);
+  const btnEl=document.getElementById('hsn-taken-btn');
+  // Show/hide taken button
+  if(hsnG<=0){
+    if(btnEl) btnEl.style.display='none';
+    document.getElementById('hsn-taken-msg').style.display='none';
+  } else {
+    if(btnEl) btnEl.style.display='';
+  }
   document.getElementById('hsn-g').textContent=hsnG>0?r(hsnG):0;
   document.getElementById('hsn-desc').textContent=hsnG>0
     ?`Añade ${r(hsnG)}g de polvo → ${r(hsnG*HSN)}g proteína (92g/100g según etiqueta).`
@@ -885,7 +935,10 @@ function renderSummary(){
 }
 function logToday(){
   const t=tots(),key=tKey();
-  dailyLog[key]={protein:Math.round(t.protein*10)/10,kcal:Math.round(t.kcal),carbs:Math.round(t.carbs*10)/10,fat:Math.round(t.fat*10)/10,sugar:Math.round(t.sugar*10)/10,met:t.protein>=cfg.prot,foods:[...todayFoods]};
+  const hsnG2 = Math.max(0,cfg.prot-t.protein)/HSN;
+  const totalProt = t.protein + (hsnTaken ? hsnG2*HSN : 0);
+  const met = totalProt >= cfg.prot;
+  dailyLog[key]={protein:Math.round(t.protein*10)/10,kcal:Math.round(t.kcal),carbs:Math.round(t.carbs*10)/10,fat:Math.round(t.fat*10)/10,sugar:Math.round(t.sugar*10)/10,met,hsnTaken,hsnG:hsnTaken?Math.round(hsnG2*10)/10:0,foods:[...todayFoods]};
   save();renderCalendar();
   alert(t.protein>=cfg.prot?`✅ ¡Objetivo cumplido! ${Math.round(t.protein*10)/10}g proteína`:`📝 Registrado: ${Math.round(t.protein*10)/10}g prot · ${Math.round(t.kcal)} kcal`);
 }
@@ -913,7 +966,10 @@ function renderCalendar(){
     const cls=k===ts?'today':l?(l.met?'ok':'fail'):'unset';
     const tip=l?` title="${k} · ${l.protein}g prot · ${l.kcal||'?'} kcal"` :'';
     if(cls !== 'empty'){
-      h+=`<div class="cal-day ${cls}" style="cursor:pointer"${tip} onclick="openEditModal('${k}')">${d}</div>`;
+      // Check if there are measures for this day
+      const hasMeasure = measures.some(m=>m.date===k);
+      const measureDot = hasMeasure ? '<span style="position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:var(--purple)"></span>' : '';
+      h+=`<div class="cal-day ${cls}" style="cursor:pointer;position:relative"${tip} onclick="openEditModal('${k}')">${d}${measureDot}</div>`;
     } else {
       h+=`<div class="cal-day empty"></div>`;
     }
@@ -1217,9 +1273,10 @@ function openEditModal(key){
   const totalsEl = document.getElementById('modal-totals');
   if(l){
     const met = l.met;
+    const hsnInfo = l.hsnTaken ? `<div style="grid-column:1/-1;background:var(--blue-bg);border-radius:var(--radius-sm);padding:6px 10px;font-size:11px;color:var(--blue)">💊 HSN tomado: ${l.hsnG||0}g de polvo (proteína extra incluida en objetivo)</div>` : '';
     totalsEl.innerHTML = `
       <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
-        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Proteína</div>
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Proteína comida</div>
         <div style="font-size:18px;font-weight:700;color:var(--blue)">${l.protein||0}g</div>
       </div>
       <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
@@ -1241,7 +1298,8 @@ function openEditModal(key){
       <div style="background:${met?'var(--green-bg)':'var(--red-bg)'};border-radius:var(--radius-sm);padding:10px;text-align:center;border:1px solid ${met?'var(--green-border)':'var(--red-border)'}">
         <div style="font-size:10px;color:${met?'var(--green)':'var(--red)'};margin-bottom:3px">Objetivo</div>
         <div style="font-size:16px;font-weight:700;color:${met?'var(--green)':'var(--red)'}">${met?'✅ Sí':'❌ No'}</div>
-      </div>`;
+      </div>
+      ${hsnInfo}`;
   } else {
     totalsEl.innerHTML = '<div style="font-size:13px;color:var(--text3);grid-column:1/-1;padding:8px 0">Sin datos registrados</div>';
   }
@@ -1269,6 +1327,19 @@ function openEditModal(key){
     foodsEl.innerHTML = '';
   }
 
+  // Show/hide measures button depending on availability
+  const hasMeasureNearby = measures.some(m=>{
+    const diff=Math.abs(new Date(m.date)-new Date(editingKey))/(1000*60*60*24);
+    return diff<=3;
+  });
+  const measBtn=document.getElementById('modal-btn-measures');
+  if(measBtn) measBtn.style.opacity=hasMeasureNearby?'1':'0.4';
+
+  // HSN info
+  if(l && l.hsnTaken){
+    const hsnInfo=document.createElement('div');
+  }
+
   showModalSummary();
   document.getElementById('edit-modal').style.display = 'flex';
 }
@@ -1276,6 +1347,42 @@ function openEditModal(key){
 function showModalSummary(){
   document.getElementById('modal-view-summary').style.display = 'block';
   document.getElementById('modal-view-edit').style.display = 'none';
+  showModalFoods(); // default subview
+}
+function showModalFoods(){
+  document.getElementById('modal-sub-foods').style.display='block';
+  document.getElementById('modal-sub-measures').style.display='none';
+  const bf=document.getElementById('modal-btn-foods');
+  const bm=document.getElementById('modal-btn-measures');
+  if(bf){bf.style.fontWeight='700';bf.style.background='var(--surface2)';}
+  if(bm){bm.style.fontWeight='400';bm.style.background='';}
+}
+function showModalMeasures(){
+  document.getElementById('modal-sub-foods').style.display='none';
+  document.getElementById('modal-sub-measures').style.display='block';
+  const bf=document.getElementById('modal-btn-foods');
+  const bm=document.getElementById('modal-btn-measures');
+  if(bf){bf.style.fontWeight='400';bf.style.background='';}
+  if(bm){bm.style.fontWeight='700';bm.style.background='var(--surface2)';}
+  // Render measures for this day or nearest
+  renderModalMeasures();
+}
+function renderModalMeasures(){
+  const el=document.getElementById('modal-measures-content');
+  if(!editingKey){el.innerHTML='';return;}
+  // Find measures on this exact date, or within 3 days
+  const exact=measures.find(m=>m.date===editingKey);
+  const nearby=measures.filter(m=>{
+    const diff=Math.abs(new Date(m.date)-new Date(editingKey))/(1000*60*60*24);
+    return diff<=3;
+  }).sort((a,b)=>Math.abs(new Date(a.date)-new Date(editingKey))-Math.abs(new Date(b.date)-new Date(editingKey)));
+  const m=nearby[0];
+  if(!m){el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:8px 0">No hay medidas registradas cerca de este día.<br>Las medidas se registran en la pestaña 📏 Medidas.</div>';return;}
+  const LBL={peso:'Peso',cintura:'Cintura',abdomen:'Abdomen',cadera:'Cadera',brazo:'Brazo relajado',brazoFlex:'Brazo contraído',muslo:'Muslo',pecho:'Pecho'};
+  const U={peso:'kg',cintura:'cm',abdomen:'cm',cadera:'cm',brazo:'cm',brazoFlex:'cm',muslo:'cm',pecho:'cm'};
+  const dateNote = m.date!==editingKey?` <span style="color:var(--text3);font-weight:400">(${m.date})</span>`:'';
+  const chips=Object.keys(LBL).filter(k=>m[k]!=null).map(k=>`<span class="chip"><b>${m[k]}${U[k]}</b> ${LBL[k]}</span>`).join('');
+  el.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Medidas del${dateNote}:</div><div class="chips">${chips}</div>`;
 }
 function showModalEdit(){
   const l = dailyLog[editingKey];
@@ -1543,7 +1650,12 @@ function init(){
   document.getElementById('today-lbl').textContent=d.toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   document.getElementById('m-date').valueAsDate=d;
   calMonth=new Date(d.getFullYear(),d.getMonth(),1);
+  // Reset HSN taken if it's a new day
+  const lastDay=localStorage.getItem('mth_hsn_date');
+  if(lastDay!==tKey()){hsnTaken=false;localStorage.setItem('mth_hsn_date',tKey());}
+  else {const ht=localStorage.getItem('mth_hsn_taken');if(ht==='1')hsnTaken=true;}
   renderFoods();renderSummary();
+  if(hsnTaken) toggleHsnTaken();
 }
 init();
 </script>
