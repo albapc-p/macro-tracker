@@ -676,7 +676,29 @@ const MEASURES={
 // Devuelve {grams, foodText} o null
 function parseMeasure(input){
   const n = norm(input);
-  // Ordenar por longitud de clave (más largas primero) para match greedy
+
+  // 1. Check CUSTOM_MEASURE_MAP first (e.g. "loncha fuet mercadona")
+  // These are measure names tied to specific foods
+  const cmKeys = Object.keys(CUSTOM_MEASURE_MAP).sort((a,b)=>b.length-a.length);
+  for(const mk of cmKeys){
+    if(n === mk || n.startsWith(mk+' ')){
+      // Get the food name from the rest of the string
+      const rest = n.slice(mk.length).replace(/^\s*(de[l]?\s+|la\s+|el\s+|los\s+|las\s+|un\s+|una\s+)?/,'').trim();
+      // Find which food this measure applies to
+      const foodMap = CUSTOM_MEASURE_MAP[mk];
+      // Check if rest matches any food in the map
+      for(const [fn, grams] of Object.entries(foodMap)){
+        if(rest === fn || rest.includes(fn) || fn.includes(rest)){
+          return {grams, foodText: fn, measureKey: mk};
+        }
+      }
+      // If rest is empty or no match, return with rest as foodText and first food's grams
+      const firstGrams = Object.values(foodMap)[0];
+      if(rest) return {grams: firstGrams, foodText: rest, measureKey: mk};
+    }
+  }
+
+  // 2. Standard MEASURES dict
   const keys = Object.keys(MEASURES).sort((a,b)=>norm(b).length-norm(a).length);
   for(const k of keys){
     const kn = norm(k);
@@ -1665,6 +1687,14 @@ function savePlatoAsCustom(){
 function saveCustomFood(){
   const name=document.getElementById('myf-name').value.trim();
   if(!name){alert('Pon un nombre al alimento');return;}
+  // Auto-add any pending measure that hasn't been clicked "+ Añadir"
+  const pendingMname=document.getElementById('myf-mname').value.trim();
+  const pendingMgrams=parseFloat(document.getElementById('myf-mgrams').value);
+  if(pendingMname&&pendingMgrams){
+    tempCustomMeasures.push({name:pendingMname,grams:pendingMgrams});
+    document.getElementById('myf-mname').value='';
+    document.getElementById('myf-mgrams').value='';
+  }
   const food={
     id:'cf_'+Date.now(),name,
     k:parseFloat(document.getElementById('myf-kcal').value)||0,
