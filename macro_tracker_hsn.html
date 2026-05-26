@@ -457,8 +457,22 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       </div>
       <!-- Medidas subview -->
       <div id="modal-sub-measures" style="display:none">
-        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Medidas corporales</div>
-        <div id="modal-measures-content"></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Medidas corporales</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div class="field"><label>Peso (kg)</label><input type="number" id="mm-peso" step="0.1" placeholder="67.7"/></div>
+          <div class="field"><label>Cintura (cm)</label><input type="number" id="mm-cintura" step="0.5" placeholder="75"/></div>
+          <div class="field"><label>Abdomen (cm)</label><input type="number" id="mm-abdomen" step="0.5" placeholder="80"/></div>
+          <div class="field"><label>Cadera (cm)</label><input type="number" id="mm-cadera" step="0.5" placeholder="90"/></div>
+          <div class="field"><label>Brazo relajado (cm)</label><input type="number" id="mm-brazo" step="0.5" placeholder="30"/></div>
+          <div class="field"><label>Brazo contraído (cm)</label><input type="number" id="mm-brazo-flex" step="0.5" placeholder="33"/></div>
+          <div class="field"><label>Muslo (cm)</label><input type="number" id="mm-muslo" step="0.5" placeholder="55"/></div>
+          <div class="field"><label>Pecho (cm)</label><input type="number" id="mm-pecho" step="0.5" placeholder="95"/></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveModalMeasures()">💾 Guardar medidas</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteModalMeasures()">🗑️ Borrar</button>
+        </div>
+        <div id="mm-status" style="font-size:12px;color:var(--text2);margin-top:6px"></div>
       </div>
       <!-- Editar alimentos subview -->
       <div id="modal-sub-edit-foods" style="display:none">
@@ -1380,37 +1394,73 @@ function showModalSummary(){
 function showModalFoods(){
   document.getElementById('modal-sub-foods').style.display='block';
   document.getElementById('modal-sub-measures').style.display='none';
-  const bf=document.getElementById('modal-btn-foods');
-  const bm=document.getElementById('modal-btn-measures');
-  if(bf){bf.style.fontWeight='700';bf.style.background='var(--surface2)';}
-  if(bm){bm.style.fontWeight='400';bm.style.background='';}
+  document.getElementById('modal-sub-edit-foods').style.display='none';
+  ['modal-btn-foods','modal-btn-measures','modal-btn-edit-foods'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.fontWeight=id==='modal-btn-foods'?'700':'400';el.style.background=id==='modal-btn-foods'?'var(--surface2)':'';}
+  });
 }
 function showModalMeasures(){
   document.getElementById('modal-sub-foods').style.display='none';
   document.getElementById('modal-sub-measures').style.display='block';
-  const bf=document.getElementById('modal-btn-foods');
-  const bm=document.getElementById('modal-btn-measures');
-  if(bf){bf.style.fontWeight='400';bf.style.background='';}
-  if(bm){bm.style.fontWeight='700';bm.style.background='var(--surface2)';}
-  // Render measures for this day or nearest
-  renderModalMeasures();
+  document.getElementById('modal-sub-edit-foods').style.display='none';
+  ['modal-btn-foods','modal-btn-measures','modal-btn-edit-foods'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.fontWeight=id==='modal-btn-measures'?'700':'400';el.style.background=id==='modal-btn-measures'?'var(--surface2)':'';}
+  });
+  populateModalMeasuresForm();
 }
-function renderModalMeasures(){
-  const el=document.getElementById('modal-measures-content');
-  if(!editingKey){el.innerHTML='';return;}
-  // Find measures on this exact date, or within 3 days
+function populateModalMeasuresForm(){
+  if(!editingKey) return;
+  // Find exact match first, then nearby
   const exact=measures.find(m=>m.date===editingKey);
   const nearby=measures.filter(m=>{
     const diff=Math.abs(new Date(m.date)-new Date(editingKey))/(1000*60*60*24);
     return diff<=3;
   }).sort((a,b)=>Math.abs(new Date(a.date)-new Date(editingKey))-Math.abs(new Date(b.date)-new Date(editingKey)));
-  const m=nearby[0];
-  if(!m){el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:8px 0">No hay medidas registradas cerca de este día.<br>Las medidas se registran en la pestaña 📏 Medidas.</div>';return;}
-  const LBL={peso:'Peso',cintura:'Cintura',abdomen:'Abdomen',cadera:'Cadera',brazo:'Brazo relajado',brazoFlex:'Brazo contraído',muslo:'Muslo',pecho:'Pecho'};
-  const U={peso:'kg',cintura:'cm',abdomen:'cm',cadera:'cm',brazo:'cm',brazoFlex:'cm',muslo:'cm',pecho:'cm'};
-  const dateNote = m.date!==editingKey?` <span style="color:var(--text3);font-weight:400">(${m.date})</span>`:'';
-  const chips=Object.keys(LBL).filter(k=>m[k]!=null).map(k=>`<span class="chip"><b>${m[k]}${U[k]}</b> ${LBL[k]}</span>`).join('');
-  el.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Medidas del${dateNote}:</div><div class="chips">${chips}</div>`;
+  const m=exact||nearby[0];
+  const fields=['peso','cintura','abdomen','cadera','brazo','brazo-flex','muslo','pecho'];
+  const keys=['peso','cintura','abdomen','cadera','brazo','brazoFlex','muslo','pecho'];
+  fields.forEach((f,i)=>{
+    const el=document.getElementById('mm-'+f);
+    if(el) el.value = m&&m[keys[i]]!=null ? m[keys[i]] : '';
+  });
+  const statusEl=document.getElementById('mm-status');
+  if(m&&m.date!==editingKey){
+    statusEl.textContent=`Mostrando medidas del ${m.date} (las más cercanas). Edita y guarda para asignarlas al ${editingKey}.`;
+  } else if(m){
+    statusEl.textContent=`Medidas registradas el ${m.date}.`;
+  } else {
+    statusEl.textContent='Sin medidas para este día. Rellena y guarda para crearlas.';
+  }
+}
+function saveModalMeasures(){
+  if(!editingKey) return;
+  const keys=['peso','cintura','abdomen','cadera','brazo','brazoFlex','muslo','pecho'];
+  const fields=['peso','cintura','abdomen','cadera','brazo','brazo-flex','muslo','pecho'];
+  const entry={date:editingKey};
+  keys.forEach((k,i)=>{
+    const v=parseFloat(document.getElementById('mm-'+fields[i]).value);
+    entry[k]=isNaN(v)?null:v;
+  });
+  const hasAny=keys.some(k=>entry[k]!=null);
+  if(!hasAny){alert('Rellena al menos una medida');return;}
+  const idx=measures.findIndex(m=>m.date===editingKey);
+  if(idx>=0) measures[idx]=entry; else measures.push(entry);
+  measures.sort((a,b)=>b.date.localeCompare(a.date));
+  save();
+  // Refresh calendar to show measure dot
+  renderCalendar();
+  document.getElementById('mm-status').textContent='✅ Medidas guardadas para el '+editingKey;
+  // Refresh measures tab too
+  renderMeasures();
+}
+function deleteModalMeasures(){
+  if(!editingKey) return;
+  if(!confirm('¿Borrar las medidas del '+editingKey+'?')) return;
+  measures=measures.filter(m=>m.date!==editingKey);
+  save();renderCalendar();renderMeasures();
+  populateModalMeasuresForm();
 }
 function showModalEdit(){
   const l = dailyLog[editingKey];
