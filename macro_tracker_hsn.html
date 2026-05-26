@@ -674,6 +674,7 @@ const MEASURES={
 
 // Detecta medida casera al inicio del string normalizado
 // Devuelve {grams, foodText} o null
+const CUSTOM_MEASURE_MAP={};
 function parseMeasure(input){
   const n = norm(input);
 
@@ -712,65 +713,90 @@ function parseMeasure(input){
 
 function parseFood(raw){
   const r = x => Math.round(x*10)/10;
-  let t = norm(raw); // trabajamos todo en normalizado
+  let t = norm(raw);
   let qty = null;
 
-  // 1. Cantidad textual
-  const NUMS_LIST = [
-    ['media',0.5],['medio',0.5],['una',1],['un',1],
-    ['dos',2],['tres',3],['cuatro',4],['cinco',5],
-    ['seis',6],['siete',7],['ocho',8],
-  ];
+  // 1. Cantidad textual al inicio
+  const NUMS_LIST = [['media',0.5],['medio',0.5],['una',1],['un',1],
+    ['dos',2],['tres',3],['cuatro',4],['cinco',5],['seis',6],['siete',7],['ocho',8]];
   for(const [word,val] of NUMS_LIST){
-    const re = new RegExp('^'+word+'\\s+|\\s+'+word+'\\s*$');
-    if(re.test(t)){qty=val; t=t.replace(new RegExp('\\b'+word+'\\b'),'').trim(); break;}
+    if(t.startsWith(word+' ')){qty=val;t=t.slice(word.length).trim();break;}
   }
 
   // 2. Cantidad numérica al inicio
   const nm = t.match(/^(\d+(?:[.,]\d+)?)\s*/);
   if(nm){qty=parseFloat(nm[1].replace(',','.'));t=t.slice(nm[0].length).trim();}
 
-  // 3. Unidades de peso/volumen directas (150g, 200ml, etc.)
-  // También al final: "arroz 150g"
-  const unitRe = /^([\d.,]+)\s*(g|gr|gramos|kg|ml|cl|dl|l)\b\s*/i;
-  const unitReEnd = /\s+([\d.,]+)\s*(g|gr|gramos|kg|ml|cl|dl|l)\b\s*$/i;
-  const unitAtStart = t.match(unitRe);
-  const unitAtEnd = t.match(unitReEnd);
-  if(unitAtStart){
-    qty=parseFloat(unitAtStart[1].replace(',','.'));
-    const u=unitAtStart[2].toLowerCase();
-    const factor=u==='kg'?1000:u==='cl'?10:u==='dl'?100:(u==='l')?1000:1;
-    const g=qty*factor;
-    t=t.slice(unitAtStart[0].length).trim();
-    t=t.replace(/^(de |la |el |los |las |un |una )/,'').trim();
-    const found=dbLookup(t);
-    if(found) return{name:raw,...macrosFromData(found.data,g)};
-    return{name:raw,kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0,unknown:true};
+  // 3. Unidades estándar de peso/volumen (150g, 200ml...)
+  const unitRe = /^(g|gr|gramos|kg|ml|cl|dl|l)\s+/i;
+  const unitReNum = /^([\d.,]+)\s*(g|gr|gramos|kg|ml|cl|dl|l)\b\s*/i;
+  const unitAtEnd = /\s+([\d.,]+)\s*(g|gr|gramos|kg|ml|cl|dl|l)\b\s*$/i;
+  const um = t.match(unitRe);
+  const umn = t.match(unitReNum);
+  if(umn){
+    // Number+unit at start e.g. "150g arroz" or unit was already stripped and qty=150
+    const uval=umn[2].toLowerCase();
+    const factor=uval==='kg'?1000:uval==='cl'?10:uval==='dl'?100:uval==='l'?1000:1;
+    qty=(qty||1)*parseFloat(umn[1].replace(',','.'))*factor;
+    t=t.slice(umn[0].length).trim();
+  } else if(um){
+    const uval=um[1].toLowerCase();
+    const factor=uval==='kg'?1000:uval==='cl'?10:uval==='dl'?100:uval==='l'?1000:1;
+    qty=(qty||1)*factor;
+    t=t.slice(um[0].length).trim();
+  } else {
+    // Check unit at end
+    const uend=t.match(unitAtEnd);
+    if(uend){
+      const uval=uend[2].toLowerCase();
+      const factor=uval==='kg'?1000:uval==='cl'?10:uval==='dl'?100:uval==='l'?1000:1;
+      qty=parseFloat(uend[1].replace(',','.'))*factor;
+      t=t.replace(unitAtEnd,'').trim();
+    }
   }
-  if(unitAtEnd && !unitAtStart){
-    const g2=parseFloat(unitAtEnd[1].replace(',','.'))*
-      (unitAtEnd[2].toLowerCase()==='kg'?1000:unitAtEnd[2].toLowerCase()==='cl'?10:
-       unitAtEnd[2].toLowerCase()==='dl'?100:unitAtEnd[2].toLowerCase()==='l'?1000:1);
-    t=t.replace(unitReEnd,'').trim();
-    const found2=dbLookup(t);
-    if(found2) return{name:raw,...macrosFromData(found2.data,g2)};
+  t=t.replace(/^(de |la |el |los |las |)/,'').trim();
+
+  // If we have a weight qty, look up food and return
+  if(qty && (umn||um||t.match(unitAtEnd))){
+    const found=dbLookup(t);
+    if(found) return{name:raw,...macrosFromData(found.data,qty)};
   }
 
-  // 4. Medida casera
+  // 4. Check standard casera measure
   const m = parseMeasure(t);
-  if(m){
-    t = m.foodText;
-    const found = dbLookup(t);
+  if(m && m.grams!==null){
+    const foodT = m.foodText||t;
+    const found = dbLookup(foodT);
     if(found){
-      const d = found.data;
-      const gramsPerMeasure = m.grams !== null ? m.grams : (d.por||100);
-      const g = (qty||1) * gramsPerMeasure;
-      return{name:raw,...macrosFromData(d,g)};
+      const g=(qty||1)*m.grams;
+      return{name:raw,...macrosFromData(found.data,g)};
     }
   }
 
-  // 5. Sin medida especial → ración por defecto
-  t=t.replace(/^(de |la |el |los |las |un |una )/,'').trim();
+  // 5. Check custom food measures: "lonchas fuet mercadona"
+  // Try stripping leading word(s) as potential measure name
+  const words = t.split(' ');
+  for(let wlen=1; wlen<=3 && wlen<words.length; wlen++){
+    const measureTry = words.slice(0,wlen).join(' ');
+    const foodTry = words.slice(wlen).join(' ');
+    if(!foodTry) continue;
+    const cf = customFoods.find(f=>{
+      const fn=norm(f.name);
+      return fn===foodTry||fn.includes(foodTry)||foodTry.includes(fn);
+    });
+    if(cf && cf.measures){
+      const measureMatch = cf.measures.find(mm=>{
+        const mn=norm(mm.name);
+        return mn===measureTry||mn+'s'===measureTry||mn+'es'===measureTry||mn+'as'===measureTry;
+      });
+      if(measureMatch){
+        const g=(qty||1)*measureMatch.grams;
+        return{name:raw,...macrosFromData(cf,g)};
+      }
+    }
+  }
+
+  // 6. No measure — default portion
   const found=dbLookup(t);
   if(found){
     const d=found.data;
@@ -987,7 +1013,8 @@ function renderSummary(){
   // Show/hide taken button
   if(hsnG<=0){
     if(btnEl) btnEl.style.display='none';
-    document.getElementById('hsn-taken-msg').style.display='none';
+    const takenMsgEl=document.getElementById('hsn-taken-msg');
+  if(takenMsgEl) takenMsgEl.style.display='none';
   } else {
     if(btnEl) btnEl.style.display='';
   }
@@ -1300,19 +1327,39 @@ function renderGuia(){
     for(const f of cfFiltered){
       const g = f.por||100;
       const r = x => Math.round(x*g/100*10)/10;
-      html += `<div class="guia-item">
-        <div>
-          <div class="guia-name">${f.name} ⭐</div>
-          <div class="guia-ration">Ración de referencia: <b>${g}g</b></div>
+      // Build measures info
+      let measuresHtml = '';
+      if(f.measures && f.measures.length){
+        measuresHtml = f.measures.map(m=>{
+          const mg = m.grams||1;
+          const rm = x => Math.round(x*mg/100*10)/10;
+          return `<div style="margin-top:6px;padding-top:6px;border-top:.5px solid var(--border)">
+            <div style="font-size:11px;color:var(--blue);font-weight:500;margin-bottom:4px">📐 1 ${m.name} = ${m.grams}g</div>
+            <div style="display:flex;flex-wrap:wrap;gap:3px">
+              <span class="guia-pill p-kcal">${rm(f.k)} kcal</span>
+              <span class="guia-pill p-prot">${rm(f.p)}g prot</span>
+              <span class="guia-pill p-fat">${rm(f.f)}g grasa</span>
+              <span class="guia-pill p-carb">${rm(f.c)}g carbs</span>
+              <span class="guia-pill p-sugar">${rm(f.s||0)}g azúcar</span>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      html += `<div class="guia-item" style="flex-direction:column;align-items:stretch">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+          <div>
+            <div class="guia-name">${f.name} ⭐</div>
+            <div class="guia-ration">${f.porExplicit?'Ración: <b>'+g+'g</b>':'Valores por 100g'}${f.desc?' · <span style=\'color:var(--text3)\'>'+(f.desc)+'</span>':''}</div>
+          </div>
+          <div class="guia-pills" style="flex-shrink:0">
+            <span class="guia-pill p-kcal">${r(f.k)} kcal</span>
+            <span class="guia-pill p-prot">${r(f.p)}g prot</span>
+            <span class="guia-pill p-fat">${r(f.f)}g grasa</span>
+            <span class="guia-pill p-carb">${r(f.c)}g carbs</span>
+            <span class="guia-pill p-sugar">${r(f.s||0)}g azúcar</span>
+          </div>
         </div>
-        <div class="guia-pills">
-          <span class="guia-pill p-kcal">${r(f.k)} kcal</span>
-          <span class="guia-pill p-prot">${r(f.p)}g prot</span>
-          <span class="guia-pill p-fat">${r(f.f)}g grasa</span>
-          <span class="guia-pill p-satfat">${r(f.sf||0)}g sat</span>
-          <span class="guia-pill p-carb">${r(f.c)}g carbs</span>
-          <span class="guia-pill p-sugar">${r(f.s||0)}g azúcar</span>
-        </div>
+        ${measuresHtml}
       </div>`;
     }
   }
@@ -1689,9 +1736,11 @@ function saveCustomFood(){
   if(!name){alert('Pon un nombre al alimento');return;}
   // Auto-add any pending measure that hasn't been clicked "+ Añadir"
   const pendingMname=document.getElementById('myf-mname').value.trim();
-  const pendingMgrams=parseFloat(document.getElementById('myf-mgrams').value);
-  if(pendingMname&&pendingMgrams){
-    tempCustomMeasures.push({name:pendingMname,grams:pendingMgrams});
+  const pendingMgramsRaw=document.getElementById('myf-mgrams').value.trim();
+  const pendingMgrams=parseFloat(pendingMgramsRaw);
+  if(pendingMname){
+    const g = (pendingMgrams>0) ? pendingMgrams : 1; // default 1g if not specified
+    tempCustomMeasures.push({name:pendingMname,grams:g});
     document.getElementById('myf-mname').value='';
     document.getElementById('myf-mgrams').value='';
   }
@@ -1704,6 +1753,7 @@ function saveCustomFood(){
     c:parseFloat(document.getElementById('myf-carb').value)||0,
     s:parseFloat(document.getElementById('myf-sugar').value)||0,
     por:parseFloat(document.getElementById('myf-portion').value)||100,
+    porExplicit:!!document.getElementById('myf-portion').value.trim(),
     measures:tempCustomMeasures.length?[...tempCustomMeasures]:undefined,
     desc:document.getElementById('myf-desc').value.trim()||undefined,
     photo:myfPhotoB64||undefined,
@@ -1719,6 +1769,29 @@ function saveCustomFood(){
 }
 
 
+
+function editCustomFood(id){
+  const f = customFoods.find(cf=>cf.id===id);
+  if(!f) return;
+  // Populate the form with existing values
+  document.getElementById('myf-name').value = f.name||'';
+  document.getElementById('myf-kcal').value = f.k||0;
+  document.getElementById('myf-prot').value = f.p||0;
+  document.getElementById('myf-fat').value = f.f||0;
+  document.getElementById('myf-satfat').value = f.sf||0;
+  document.getElementById('myf-carb').value = f.c||0;
+  document.getElementById('myf-sugar').value = f.s||0;
+  document.getElementById('myf-portion').value = f.porExplicit ? (f.por||'') : '';
+  document.getElementById('myf-desc').value = f.desc||'';
+  tempCustomMeasures = f.measures ? JSON.parse(JSON.stringify(f.measures)) : [];
+  renderTempMeasures();
+  // Remove old entry so saveCustomFood creates a fresh one
+  customFoods = customFoods.filter(cf=>cf.id!==id);
+  // Scroll to form
+  document.getElementById('myf-name').scrollIntoView({behavior:'smooth'});
+  document.getElementById('myf-name').focus();
+}
+
 function deleteCustomFood(id){customFoods=customFoods.filter(f=>f.id!==id);save();renderCustomFoods();}
 function renderCustomFoods(){
   const el=document.getElementById('myf-list');
@@ -1726,7 +1799,13 @@ function renderCustomFoods(){
   el.innerHTML=customFoods.map(f=>`
     <div class="myf-card">
       ${f.photo?`<img src="${f.photo}" style="width:100%;max-height:120px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:8px"/>`:'' }
-      <div class="myf-top"><span class="myf-name">${f.name}</span><button class="btn btn-danger btn-sm" onclick="deleteCustomFood('${f.id}')">🗑️</button></div>
+      <div class="myf-top">
+        <span class="myf-name">${f.name}</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="editCustomFood('${f.id}')" title="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCustomFood('${f.id}')">🗑️</button>
+        </div>
+      </div>
       ${f.desc?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${f.desc}</div>`:''}
       <div class="pills">
         <span class="pill p-kcal">${f.k||0} kcal/100g</span>
