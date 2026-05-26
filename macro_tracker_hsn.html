@@ -162,6 +162,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
   <button class="tab" onclick="showTab('med')">📏 Medidas</button>
   <button class="tab" onclick="showTab('myf')">⭐ Mis alimentos</button>
   <button class="tab" onclick="showTab('cfg')">⚙️ Ajustes</button>
+  <button class="tab" onclick="showTab('stats')">📊 Estadísticas</button>
   <button class="tab" onclick="showTab('guia')">📖 Guía</button>
 </div>
 
@@ -526,6 +527,68 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       </div>
     </div>
   </div>
+</div>
+<!-- ESTADÍSTICAS -->
+<div id="tab-stats" class="section">
+
+  <!-- Filtro de fechas -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:1.25rem">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Rango de fechas</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-sm" onclick="setRange('1m')">1 mes</button>
+      <button class="btn btn-sm" onclick="setRange('3m')">3 meses</button>
+      <button class="btn btn-sm" onclick="setRange('6m')">6 meses</button>
+      <button class="btn btn-sm" onclick="setRange('1y')">1 año</button>
+      <button class="btn btn-sm" onclick="setRange('all')">Todo</button>
+      <button class="btn btn-sm" onclick="setRange('custom')">Personalizado</button>
+    </div>
+    <div id="custom-range" style="display:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="stats-from" style="flex:1;min-width:130px"/>
+      <span style="color:var(--text2);font-size:13px">→</span>
+      <input type="date" id="stats-to" style="flex:1;min-width:130px"/>
+      <button class="btn btn-sm btn-primary" onclick="renderStats()">Aplicar</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px" id="stats-range-label"></div>
+  </div>
+
+  <!-- Summary cards -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1.25rem" id="stats-summary"></div>
+
+  <!-- Gráfico peso -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">⚖️ Evolución del peso</div>
+    <canvas id="chart-peso" height="180"></canvas>
+    <div id="chart-peso-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin datos de peso en este período</div>
+  </div>
+
+  <!-- Gráfico medidas corporales -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px">📏 Medidas corporales</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="measure-toggles"></div>
+    <canvas id="chart-medidas" height="180"></canvas>
+    <div id="chart-medidas-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin medidas en este período</div>
+  </div>
+
+  <!-- Gráfico proteína diaria -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">🐟 Proteína diaria</div>
+    <canvas id="chart-prot" height="160"></canvas>
+    <div id="chart-prot-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin registros en este período</div>
+  </div>
+
+  <!-- Gráfico kcal diarias -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">⚡ Calorías diarias</div>
+    <canvas id="chart-kcal" height="160"></canvas>
+    <div id="chart-kcal-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin registros en este período</div>
+  </div>
+
+  <!-- Tabla resumen mensual -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">📅 Resumen mensual</div>
+    <div id="monthly-table" style="overflow-x:auto"></div>
+  </div>
+
 </div>
 </div>
 
@@ -1342,6 +1405,7 @@ function renderGuia(){
               <span class="guia-pill p-carb">${rm(f.c)}g carbs</span>
               <span class="guia-pill p-sugar">${rm(f.s||0)}g azúcar</span>
             </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:3px">Por 100g: ${f.k||0} kcal · ${f.p||0}g prot · ${f.f||0}g grasa · ${f.c||0}g carbs · ${f.s||0}g azúcar</div>
           </div>`;
         }).join('');
       }
@@ -1957,6 +2021,286 @@ function saveModalFoods(){
   showModalFoods();
 }
 
+
+// ── ESTADÍSTICAS ──
+let statsFrom = null, statsTo = null;
+let activeMeasureLines = new Set(['peso','cintura','brazo','brazoFlex']);
+let chartPeso = null, chartMedidas = null, chartProt = null, chartKcal = null;
+
+const MEASURE_COLORS = {
+  peso:      {color:'#7F77DD', label:'Peso (kg)'},
+  cintura:   {color:'#D85A30', label:'Cintura (cm)'},
+  abdomen:   {color:'#E24B4A', label:'Abdomen (cm)'},
+  cadera:    {color:'#BA7517', label:'Cadera (cm)'},
+  brazo:     {color:'#378ADD', label:'Brazo relajado (cm)'},
+  brazoFlex: {color:'#3B6D11', label:'Brazo contraído (cm)'},
+  muslo:     {color:'#72243E', label:'Muslo (cm)'},
+  pecho:     {color:'#3C3489', label:'Pecho (cm)'},
+};
+
+function setRange(r){
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  statsTo = fmt(today);
+  if(r==='1m')      statsFrom = fmt(new Date(today.getFullYear(), today.getMonth()-1, today.getDate()));
+  else if(r==='3m') statsFrom = fmt(new Date(today.getFullYear(), today.getMonth()-3, today.getDate()));
+  else if(r==='6m') statsFrom = fmt(new Date(today.getFullYear(), today.getMonth()-6, today.getDate()));
+  else if(r==='1y') statsFrom = fmt(new Date(today.getFullYear()-1, today.getMonth(), today.getDate()));
+  else if(r==='all'){ statsFrom=null; statsTo=null; }
+  else if(r==='custom'){
+    document.getElementById('custom-range').style.display='flex';
+    return;
+  }
+  document.getElementById('custom-range').style.display='none';
+  renderStats();
+}
+
+function getFilteredRange(){
+  let from = statsFrom, to = statsTo;
+  if(document.getElementById('custom-range').style.display!=='none'){
+    from = document.getElementById('stats-from').value || null;
+    to   = document.getElementById('stats-to').value   || null;
+  }
+  return {from, to};
+}
+
+function inRange(dateStr, from, to){
+  if(from && dateStr < from) return false;
+  if(to   && dateStr > to)   return false;
+  return true;
+}
+
+function loadChartJS(cb){
+  if(window.Chart){ cb(); return; }
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+  s.onload=cb; document.head.appendChild(s);
+}
+
+function renderStats(){
+  loadChartJS(()=>{
+    const {from,to} = getFilteredRange();
+
+    // Label
+    const lbl = from||to ? `${from||'inicio'} → ${to||'hoy'}` : 'Todo el período';
+    document.getElementById('stats-range-label').textContent = lbl;
+
+    // Filtered data
+    const filtMeasures = measures.filter(m=>inRange(m.date,from,to)).sort((a,b)=>a.date.localeCompare(b.date));
+    const filtLog = Object.entries(dailyLog).filter(([d])=>inRange(d,from,to)).sort((a,b)=>a[0].localeCompare(b[0]));
+
+    renderStatsSummary(filtMeasures, filtLog, from, to);
+    renderPesoChart(filtMeasures);
+    renderMedidasChart(filtMeasures);
+    renderProtChart(filtLog);
+    renderKcalChart(filtLog);
+    renderMonthlyTable(filtLog, filtMeasures);
+  });
+}
+
+function destroyChart(ref){ if(ref){ try{ref.destroy();}catch(e){} } return null; }
+
+function chartDefaults(){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+    scales:{
+      x:{ticks:{maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}},
+      y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}
+    }
+  };
+}
+
+function renderStatsSummary(filtM, filtLog, from, to){
+  const el = document.getElementById('stats-summary');
+  const days = filtLog.length;
+  const metDays = filtLog.filter(([,l])=>l.met).length;
+  const pctMet = days ? Math.round(metDays/days*100) : 0;
+  const avgProt = days ? Math.round(filtLog.reduce((s,[,l])=>s+(l.protein||0),0)/days*10)/10 : 0;
+  const avgKcal = days ? Math.round(filtLog.reduce((s,[,l])=>s+(l.kcal||0),0)/days) : 0;
+
+  const firstPeso = filtM.find(m=>m.peso!=null);
+  const lastPeso  = [...filtM].reverse().find(m=>m.peso!=null);
+  const pesoDiff  = (firstPeso&&lastPeso&&firstPeso!==lastPeso) ? Math.round((lastPeso.peso-firstPeso.peso)*10)/10 : null;
+
+  const firstBrazo = filtM.find(m=>m.brazoFlex!=null);
+  const lastBrazo  = [...filtM].reverse().find(m=>m.brazoFlex!=null);
+  const brazoDiff  = (firstBrazo&&lastBrazo&&firstBrazo!==lastBrazo) ? Math.round((lastBrazo.brazoFlex-firstBrazo.brazoFlex)*10)/10 : null;
+
+  const card = (label,val,sub,color)=>`
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">${label}</div>
+      <div style="font-size:20px;font-weight:700;color:${color||'var(--text)'}">${val}</div>
+      ${sub?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${sub}</div>`:''}
+    </div>`;
+
+  el.innerHTML =
+    card('Días registrados', days, `${metDays} con objetivo cumplido`, 'var(--text)') +
+    card('% objetivo proteína', pctMet+'%', `≥70g proteína`, pctMet>=70?'var(--green)':'#BA7517') +
+    card('Proteína media/día', avgProt+'g', `objetivo ${cfg.prot}g`, avgProt>=cfg.prot?'var(--green)':'var(--blue)') +
+    card('Kcal media/día', avgKcal, `objetivo ${cfg.kcal} kcal`, 'var(--purple)') +
+    (pesoDiff!==null ? card('Cambio de peso', (pesoDiff>0?'+':'')+pesoDiff+'kg',
+      `${firstPeso.peso}kg → ${lastPeso.peso}kg`, pesoDiff<0?'var(--green)':'var(--coral)') : '') +
+    (brazoDiff!==null ? card('Brazo contraído', (brazoDiff>0?'+':'')+brazoDiff+'cm',
+      `${firstBrazo.brazoFlex}cm → ${lastBrazo.brazoFlex}cm`, brazoDiff>0?'var(--green)':'var(--red)') : '');
+}
+
+function renderPesoChart(filtM){
+  const data = filtM.filter(m=>m.peso!=null);
+  const empty = document.getElementById('chart-peso-empty');
+  const canvas = document.getElementById('chart-peso');
+  if(!data.length){ canvas.style.display='none'; empty.style.display='block'; chartPeso=destroyChart(chartPeso); return; }
+  canvas.style.display=''; empty.style.display='none';
+  chartPeso=destroyChart(chartPeso);
+  chartPeso=new Chart(canvas,{type:'line',data:{
+    labels:data.map(m=>m.date.slice(5)),
+    datasets:[{label:'Peso (kg)',data:data.map(m=>m.peso),borderColor:'#7F77DD',backgroundColor:'rgba(127,119,221,0.1)',tension:0.3,fill:true,pointRadius:4}]
+  },options:{...chartDefaults(),plugins:{...chartDefaults().plugins,legend:{display:true,labels:{font:{size:11}}}},scales:{...chartDefaults().scales,y:{...chartDefaults().scales.y,title:{display:true,text:'kg',font:{size:10}}}}}});
+}
+
+function renderMedidasChart(filtM){
+  const canvas = document.getElementById('chart-medidas');
+  const empty = document.getElementById('chart-medidas-empty');
+  const keys = Object.keys(MEASURE_COLORS).filter(k=>k!=='peso');
+  // Build toggles
+  const toggleEl = document.getElementById('measure-toggles');
+  toggleEl.innerHTML = keys.map(k=>{
+    const active = activeMeasureLines.has(k);
+    const c = MEASURE_COLORS[k].color;
+    return `<button class="toggle-btn" id="toggle-${k}" onclick="toggleMeasureLine('${k}')"
+      style="background:${active?c:'transparent'};color:${active?'#fff':c};border-color:${c}">
+      ${MEASURE_COLORS[k].label.split(' ')[0]}
+    </button>`;
+  }).join('');
+
+  const activeKeys = keys.filter(k=>activeMeasureLines.has(k));
+  const data = filtM.filter(m=>activeKeys.some(k=>m[k]!=null));
+  if(!data.length){ canvas.style.display='none'; empty.style.display='block'; chartMedidas=destroyChart(chartMedidas); return; }
+  canvas.style.display=''; empty.style.display='none';
+  chartMedidas=destroyChart(chartMedidas);
+  chartMedidas=new Chart(canvas,{type:'line',data:{
+    labels:data.map(m=>m.date.slice(5)),
+    datasets:activeKeys.map(k=>({
+      label:MEASURE_COLORS[k].label,
+      data:data.map(m=>m[k]??null),
+      borderColor:MEASURE_COLORS[k].color,
+      backgroundColor:MEASURE_COLORS[k].color+'22',
+      tension:0.3,fill:false,pointRadius:4,spanGaps:true
+    }))
+  },options:{...chartDefaults(),plugins:{...chartDefaults().plugins,legend:{display:true,labels:{font:{size:10},boxWidth:12}}}}});
+}
+
+function toggleMeasureLine(k){
+  if(activeMeasureLines.has(k)) activeMeasureLines.delete(k);
+  else activeMeasureLines.add(k);
+  const {from,to}=getFilteredRange();
+  const filtM=measures.filter(m=>inRange(m.date,from,to)).sort((a,b)=>a.date.localeCompare(b.date));
+  renderMedidasChart(filtM);
+}
+
+function barChart(canvas, labels, data, color, goalLine){
+  const opts = {...chartDefaults(),
+    plugins:{...chartDefaults().plugins,
+      legend:{display:false},
+      annotation: goalLine ? {annotations:{goal:{type:'line',yMin:goalLine,yMax:goalLine,borderColor:'rgba(200,50,50,0.5)',borderWidth:1,borderDash:[4,4]}}} : {}
+    }
+  };
+  return new Chart(canvas,{type:'bar',data:{labels,datasets:[{data,backgroundColor:color+'99',borderColor:color,borderWidth:1,borderRadius:3}]},options:opts});
+}
+
+function renderProtChart(filtLog){
+  const canvas = document.getElementById('chart-prot');
+  const empty = document.getElementById('chart-prot-empty');
+  if(!filtLog.length){ canvas.style.display='none'; empty.style.display='block'; chartProt=destroyChart(chartProt); return; }
+  canvas.style.display=''; empty.style.display='none';
+  chartProt=destroyChart(chartProt);
+  // Aggregate by week if >60 days, by day otherwise
+  const labels=[], vals=[];
+  if(filtLog.length>60){
+    // Weekly avg
+    const weeks={};
+    filtLog.forEach(([d,l])=>{
+      const dt=new Date(d); const mon=new Date(dt); mon.setDate(dt.getDate()-dt.getDay()+1);
+      const wk=mon.toISOString().split('T')[0];
+      if(!weeks[wk]){weeks[wk]={sum:0,n:0};}
+      weeks[wk].sum+=(l.protein||0); weeks[wk].n++;
+    });
+    Object.entries(weeks).sort().forEach(([w,v])=>{labels.push(w.slice(5));vals.push(Math.round(v.sum/v.n*10)/10);});
+  } else {
+    filtLog.forEach(([d,l])=>{labels.push(d.slice(5));vals.push(l.protein||0);});
+  }
+  chartProt=barChart(canvas, labels, vals, '#378ADD', cfg.prot);
+}
+
+function renderKcalChart(filtLog){
+  const canvas = document.getElementById('chart-kcal');
+  const empty = document.getElementById('chart-kcal-empty');
+  if(!filtLog.length){ canvas.style.display='none'; empty.style.display='block'; chartKcal=destroyChart(chartKcal); return; }
+  canvas.style.display=''; empty.style.display='none';
+  chartKcal=destroyChart(chartKcal);
+  const labels=[], vals=[];
+  if(filtLog.length>60){
+    const weeks={};
+    filtLog.forEach(([d,l])=>{
+      const dt=new Date(d); const mon=new Date(dt); mon.setDate(dt.getDate()-dt.getDay()+1);
+      const wk=mon.toISOString().split('T')[0];
+      if(!weeks[wk]){weeks[wk]={sum:0,n:0};}
+      weeks[wk].sum+=(l.kcal||0); weeks[wk].n++;
+    });
+    Object.entries(weeks).sort().forEach(([w,v])=>{labels.push(w.slice(5));vals.push(Math.round(v.sum/v.n));});
+  } else {
+    filtLog.forEach(([d,l])=>{labels.push(d.slice(5));vals.push(l.kcal||0);});
+  }
+  chartKcal=barChart(canvas, labels, vals, '#7F77DD', cfg.kcal);
+}
+
+function renderMonthlyTable(filtLog, filtM){
+  const el = document.getElementById('monthly-table');
+  // Group log by month
+  const months={};
+  filtLog.forEach(([d,l])=>{
+    const m=d.slice(0,7);
+    if(!months[m]){months[m]={days:0,met:0,sumProt:0,sumKcal:0,sumCarbs:0};}
+    months[m].days++; if(l.met) months[m].met++;
+    months[m].sumProt+=(l.protein||0); months[m].sumKcal+=(l.kcal||0); months[m].sumCarbs+=(l.carbs||0);
+  });
+  // Add weight from measures
+  const weightByMonth={};
+  filtM.filter(m=>m.peso!=null).forEach(m=>{ const mo=m.date.slice(0,7); weightByMonth[mo]=(weightByMonth[mo]||[]).concat(m.peso); });
+
+  const monthNames=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const rows = Object.entries(months).sort().map(([mo,v])=>{
+    const [y,m]=mo.split('-');
+    const label=monthNames[parseInt(m)-1]+' '+y;
+    const avgProt=Math.round(v.sumProt/v.days*10)/10;
+    const avgKcal=Math.round(v.sumKcal/v.days);
+    const pct=Math.round(v.met/v.days*100);
+    const weights=weightByMonth[mo]||[];
+    const pesoStr=weights.length?weights[weights.length-1]+'kg':'—';
+    return `<tr>
+      <td style="padding:7px 10px;font-weight:600;white-space:nowrap">${label}</td>
+      <td style="padding:7px 10px;text-align:center">${v.days}</td>
+      <td style="padding:7px 10px;text-align:center;color:${pct>=70?'var(--green)':'#BA7517'};font-weight:600">${pct}%</td>
+      <td style="padding:7px 10px;text-align:center;color:var(--blue)">${avgProt}g</td>
+      <td style="padding:7px 10px;text-align:center">${avgKcal}</td>
+      <td style="padding:7px 10px;text-align:center;color:var(--purple)">${pesoStr}</td>
+    </tr>`;
+  }).join('');
+
+  if(!rows){el.innerHTML='<div style="font-size:13px;color:var(--text3);padding:1rem 0">Sin datos en este período</div>';return;}
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:var(--surface2);color:var(--text2);font-size:11px;font-weight:600">
+      <th style="padding:7px 10px;text-align:left">Mes</th>
+      <th style="padding:7px 10px">Días</th>
+      <th style="padding:7px 10px">% objetivo</th>
+      <th style="padding:7px 10px">Prot media</th>
+      <th style="padding:7px 10px">Kcal media</th>
+      <th style="padding:7px 10px">Peso final</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
 // ── TABS ──
 function showTab(t){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
@@ -1968,6 +2312,7 @@ function showTab(t){
   if(t==='myf')renderCustomFoods();
   if(t==='cfg')loadConfigUI();
   if(t==='guia')renderGuia();
+  if(t==='stats'){setRange('all');}
 }
 
 // ── INIT ──
