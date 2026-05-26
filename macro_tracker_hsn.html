@@ -181,7 +181,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
     <div class="add-section active" id="add-buscar">
       <div class="row">
         <div class="ac-wrap">
-          <input type="text" id="food-input" placeholder="Ej: 2 huevos, 150g arroz, 1 yogur..." onkeydown="if(event.key==='Enter'){addFood();closeAC()}" oninput="onFoodInput(this.value)" onblur="setTimeout(closeAC,200)" autocomplete="off"/>
+          <input type="text" id="food-input" placeholder="Ej: 2 huevos, 150g arroz, 1 yogur..." onkeydown="if(event.key==='Enter'){addFood();closeAC()}" oninput="onFoodInput(this.value)" autocomplete="off"/>
           <div class="ac-list" id="ac-list" style="display:none"></div>
         </div>
         <button class="btn btn-primary" onclick="addFood()">+ Añadir</button>
@@ -539,49 +539,131 @@ const DB_NORM={};for(const k of Object.keys(DB))DB_NORM[norm(k)]=k;
 
 const NUMS={una:1,un:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,media:0.5,medio:0.5};
 
-// Medidas caseras → gramos/ml aproximados (en singular, el sistema maneja plurales)
-const MEASURES_LIST=[
-  // Específicas primero (más largas), luego genéricas
-  {k:'cucharada sopera',   g:15},  {k:'cucharada grande',  g:15},
-  {k:'cda sopera',         g:15},  {k:'cda grande',        g:15},
-  {k:'cucharada postre',   g:10},  {k:'cucharada mediana', g:10},
-  {k:'cda postre',         g:10},  {k:'cda mediana',       g:10},
-  {k:'cucharada pequeña',  g:5},   {k:'cucharada pequena', g:5},
-  {k:'cucharada cafe',     g:5},   {k:'cucharadita cafe',  g:5},
-  {k:'cucharadita',        g:5},   {k:'cdta',              g:5},
-  {k:'cucharada',          g:15},  {k:'cda',               g:15},
-  {k:'vaso pequeño',       g:150}, {k:'vaso pequeno',      g:150},
-  {k:'vaso peq',           g:150},
-  {k:'vaso grande',        g:330},
-  {k:'vaso',               g:250},
-  {k:'taza cafe',          g:50},  {k:'taza te',           g:250},
-  {k:'taza grande',        g:350},
-  {k:'taza',               g:250},
-  {k:'tazón',              g:400}, {k:'tazon',             g:400},
-  {k:'puñadito',           g:15},  {k:'punadito',          g:15},
-  {k:'puñado',             g:30},  {k:'punado',            g:30},
-  {k:'ración',             g:null},{k:'racion',            g:null},
-  {k:'pizca',              g:1},
-];
+// Medidas caseras → ml/g aproximados
+// Clave: todas las formas posibles (singular, plural, con tilde, sin tilde)
+const MEASURES={
+  'cucharadita':5,'cucharaditas':5,'cdta':5,'cdtas':5,
+  'cucharada cafe':5,'cucharadas cafe':5,
+  'cucharada postre':10,'cucharadas postre':10,'cda postre':10,'cdas postre':10,
+  'cucharada sopera':15,'cucharadas soperas':15,'cda sopera':15,'cdas soperas':15,
+  'cucharada grande':15,'cucharadas grandes':15,
+  'cucharada':15,'cucharadas':15,'cda':15,'cdas':15,
+  'vaso pequeno':150,'vasos pequenos':150,'vaso pequeño':150,'vasos pequeños':150,
+  'vaso grande':330,'vasos grandes':330,
+  'vaso':250,'vasos':250,
+  'taza cafe':50,'tazas cafe':50,
+  'taza te':250,'tazas te':250,
+  'taza grande':350,'tazas grandes':350,
+  'taza':250,'tazas':250,
+  'tazon':400,'tazones':400,'tazón':400,'tazónes':400,
+  'punadito':15,'punaditos':15,'puñadito':15,'puñaditos':15,
+  'punado':30,'punados':30,'puñado':30,'puñados':30,
+  'racion':null,'raciones':null,'ración':null,'raciones':null,
+  'pizca':1,'pizcas':1,
+};
 
-// Detecta medida casera ignorando plurales y tildes
-function parseMeasure(t){
-  const tn = norm(t);
-  for(const {k,g} of MEASURES_LIST){
+// Detecta medida casera al inicio del string normalizado
+// Devuelve {grams, foodText} o null
+function parseMeasure(input){
+  const n = norm(input);
+  // Ordenar por longitud de clave (más largas primero) para match greedy
+  const keys = Object.keys(MEASURES).sort((a,b)=>norm(b).length-norm(a).length);
+  for(const k of keys){
     const kn = norm(k);
-    // Acepta singular, plural con -s, plural con -as, plural con -es
-    const variants = [kn, kn+'s', kn+'as', kn+'es'];
-    for(const v of variants){
-      if(tn.startsWith(v+' ') || tn===v){
-        // Quitar la medida del texto + "de/del/la/el" opcionales
-        const rest = t.slice(v.length).replace(/^\s*(de[l]?\s+)?(la\s+|el\s+|los\s+|las\s+|un\s+|una\s+)?/i,'').trim();
-        return {measure:k, grams:g, rest};
-      }
+    if(n === kn || n.startsWith(kn+' ')){
+      const after = n.slice(kn.length).replace(/^\s*(de[l]?\s+|la\s+|el\s+|los\s+|las\s+|un\s+|una\s+)?/,'').trim();
+      return {grams: MEASURES[k], foodText: after, measureKey: k};
     }
   }
   return null;
 }
-const UNITS=['g','gr','gramos','kg'];
+
+function parseFood(raw){
+  const r = x => Math.round(x*10)/10;
+  let t = norm(raw); // trabajamos todo en normalizado
+  let qty = null;
+
+  // 1. Cantidad textual
+  const NUMS_LIST = [
+    ['media',0.5],['medio',0.5],['una',1],['un',1],
+    ['dos',2],['tres',3],['cuatro',4],['cinco',5],
+    ['seis',6],['siete',7],['ocho',8],
+  ];
+  for(const [word,val] of NUMS_LIST){
+    const re = new RegExp('^'+word+'\\s+|\\s+'+word+'\\s*$');
+    if(re.test(t)){qty=val; t=t.replace(new RegExp('\\b'+word+'\\b'),'').trim(); break;}
+  }
+
+  // 2. Cantidad numérica al inicio
+  const nm = t.match(/^(\d+(?:[.,]\d+)?)\s*/);
+  if(nm){qty=parseFloat(nm[1].replace(',','.'));t=t.slice(nm[0].length).trim();}
+
+  // 3. Unidades de peso/volumen directas (150g, 200ml, etc.)
+  // También al final: "arroz 150g"
+  const unitRe = /^([\d.,]+)\s*(g|gr|gramos|kg|ml|cl|dl|l)\b\s*/i;
+  const unitReEnd = /\s+([\d.,]+)\s*(g|gr|gramos|kg|ml|cl|dl|l)\b\s*$/i;
+  const unitAtStart = t.match(unitRe);
+  const unitAtEnd = t.match(unitReEnd);
+  if(unitAtStart){
+    qty=parseFloat(unitAtStart[1].replace(',','.'));
+    const u=unitAtStart[2].toLowerCase();
+    const factor=u==='kg'?1000:u==='cl'?10:u==='dl'?100:(u==='l')?1000:1;
+    const g=qty*factor;
+    t=t.slice(unitAtStart[0].length).trim();
+    t=t.replace(/^(de |la |el |los |las |un |una )/,'').trim();
+    const found=dbLookup(t);
+    if(found) return{name:raw,...macrosFromData(found.data,g)};
+    return{name:raw,kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0,unknown:true};
+  }
+  if(unitAtEnd && !unitAtStart){
+    const g2=parseFloat(unitAtEnd[1].replace(',','.'))*
+      (unitAtEnd[2].toLowerCase()==='kg'?1000:unitAtEnd[2].toLowerCase()==='cl'?10:
+       unitAtEnd[2].toLowerCase()==='dl'?100:unitAtEnd[2].toLowerCase()==='l'?1000:1);
+    t=t.replace(unitReEnd,'').trim();
+    const found2=dbLookup(t);
+    if(found2) return{name:raw,...macrosFromData(found2.data,g2)};
+  }
+
+  // 4. Medida casera
+  console.log('BEFORE parseMeasure: t='+JSON.stringify(t)+' qty='+qty);
+  const m = parseMeasure(t);
+  console.log('parseMeasure result:', JSON.stringify(m));
+  if(m){
+    t = m.foodText;
+    const found = dbLookup(t);
+    console.log('dbLookup("'+t+'") =', found ? 'FOUND:'+found.src : 'NOT FOUND');
+    if(found){
+      const d = found.data;
+      const gramsPerMeasure = m.grams !== null ? m.grams : (d.por||100);
+      const g = (qty||1) * gramsPerMeasure;
+      return{name:raw,...macrosFromData(d,g)};
+    }
+  }
+
+  // 5. Sin medida especial → ración por defecto
+  t=t.replace(/^(de |la |el |los |las |un |una )/,'').trim();
+  const found=dbLookup(t);
+  if(found){
+    const d=found.data;
+    const g=(qty||1)*(d.por||100);
+    return{name:raw,...macrosFromData(d,g)};
+  }
+
+  return{name:raw,kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0,unknown:true};
+}
+
+function splitIngredients(raw){
+  const result=[];
+  for(const part of raw.split(/,\s*/)){
+    if(!part.trim())continue;
+    const subs=part.split(/\s+(?:con|y|mas|más|\+)\s+/i);
+    subs.forEach(s=>{if(s.trim())result.push(s.trim());});
+  }
+  return result;
+}
+
+
+
 
 // ── STATE ──
 let todayFoods=[],dailyLog={},measures=[],customFoods=[];
@@ -604,103 +686,19 @@ function save(){
   }catch(e){}
 }
 
-// ── CUSTOM FOODS ──
-function saveCustomFood(){
-  const name=document.getElementById('myf-name').value.trim();
-  if(!name){alert('Pon un nombre al alimento');return;}
-  const food={
-    id:'cf_'+Date.now(),name,
-    k:parseFloat(document.getElementById('myf-kcal').value)||0,
-    p:parseFloat(document.getElementById('myf-prot').value)||0,
-    f:parseFloat(document.getElementById('myf-fat').value)||0,
-    sf:parseFloat(document.getElementById('myf-satfat').value)||0,
-    c:parseFloat(document.getElementById('myf-carb').value)||0,
-    s:parseFloat(document.getElementById('myf-sugar').value)||0,
-    por:parseFloat(document.getElementById('myf-portion').value)||100,
-  };
-  customFoods.push(food);save();renderCustomFoods();
-  ['myf-name','myf-kcal','myf-prot','myf-fat','myf-satfat','myf-carb','myf-sugar','myf-portion'].forEach(id=>document.getElementById(id).value='');
-  alert('✅ Alimento guardado en Mis alimentos');
-}
-function deleteCustomFood(id){customFoods=customFoods.filter(f=>f.id!==id);save();renderCustomFoods();}
-function renderCustomFoods(){
-  const el=document.getElementById('myf-list');
-  if(!customFoods.length){el.innerHTML='<div class="empty">Aún no tienes alimentos guardados</div>';return;}
-  el.innerHTML=customFoods.map(f=>`
-    <div class="myf-card">
-      <div class="myf-top"><span class="myf-name">${f.name}</span><button class="btn btn-danger btn-sm" onclick="deleteCustomFood('${f.id}')">🗑️</button></div>
-      <div class="pills">
-        <span class="pill p-kcal">${f.k} kcal/100g</span>
-        <span class="pill p-prot">${f.p}g prot</span>
-        <span class="pill p-fat">${f.f}g grasa</span>
-        <span class="pill p-carb">${f.c}g carbs</span>
-        <span style="font-size:11px;color:var(--text3)">Ración típica: ${f.por}g</span>
-      </div>
-    </div>`).join('');
-}
+// ── DB LOOKUP ──
 
-// Guardar desde el panel manual como alimento personalizado
-function saveManualAsCustom(){
-  const n=document.getElementById('man-name').value.trim()||'Alimento personalizado';
-  customFoods.push({id:'cf_'+Date.now(),name:n,
-    k:parseFloat(document.getElementById('man-kcal').value)||0,
-    p:parseFloat(document.getElementById('man-prot').value)||0,
-    f:parseFloat(document.getElementById('man-fat').value)||0,
-    sf:parseFloat(document.getElementById('man-satfat').value)||0,
-    c:parseFloat(document.getElementById('man-carb').value)||0,
-    s:parseFloat(document.getElementById('man-sugar').value)||0,
-    por:parseFloat(document.getElementById('man-grams').value)||100,
-  });
-  save();renderCustomFoods();alert('✅ Guardado en Mis alimentos');
-}
-
-// ── AUTOCOMPLETE ──
-function allFoodNames(){
-  const builtin=Object.keys(DB).map(k=>({name:k,src:'db',data:DB[k]}));
-  const custom=customFoods.map(f=>({name:f.name,src:'custom',data:f}));
-  return[...custom,...builtin];
-}
-function onFoodInput(val){
-  const v=norm(val.replace(/^\d+\s*(g|gr|gramos|kg)?\s*/i,'').replace(/^(de|la|el|los|las|un|una)\s+/i,''));
-  if(v.length<2){closeAC();return;}
-  const all=allFoodNames();
-  const matches=all.filter(f=>norm(f.name).includes(v)).slice(0,8);
-  if(!matches.length){closeAC();return;}
-  const list=document.getElementById('ac-list');
-  list.innerHTML=matches.map(m=>{
-    const d=m.data;
-    return`<div class="ac-item" onmousedown="pickAC('${m.name.replace(/'/g,"\\'")}','${m.src}')">
-      <span>${m.name}${m.src==='custom'?' ⭐':''}</span>
-      <small>${d.k||d.kcal||0} kcal · ${d.p}g prot · ${d.c}g carbs — por 100g · ración ${d.por}g</small>
-    </div>`;
-  }).join('');
-  list.style.display='block';
-}
-function pickAC(name,src){
-  const inp=document.getElementById('food-input');
-  // Preserve any leading quantity
-  const m=inp.value.match(/^(\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|kg)?\s*)/i);
-  inp.value=(m?m[1]:'')+name;
-  closeAC();
-}
-function closeAC(){document.getElementById('ac-list').style.display='none';}
-
-// ── PARSE ──
 function dbLookup(t){
   const tn=norm(t);
   const ts=normStem(t);
-  // 1. Exact normalized match
   if(DB_NORM[tn])return{src:'db',data:DB[DB_NORM[tn]]};
-  // 2. Stem match (ignores plurals)
   for(const[kn,korig] of Object.entries(DB_NORM)){
     if(normStem(kn)===ts)return{src:'db',data:DB[korig]};
   }
-  // 3. Custom foods — exact or stem
   for(const cf of customFoods){
     const cn=norm(cf.name),cs=normStem(cf.name);
     if(cn===tn||cs===ts||cn.includes(tn)||tn.includes(cn))return{src:'custom',data:cf};
   }
-  // 4. Substring match (longest key wins)
   let best=null,bestLen=0;
   for(const[kn,korig] of Object.entries(DB_NORM)){
     const ks=normStem(kn);
@@ -710,80 +708,49 @@ function dbLookup(t){
   }
   return best?{src:'db',data:best}:null;
 }
+
 function macrosFromData(d,g){
   const r=x=>Math.round(x*10)/10;
   return{kcal:r(g*(d.k||d.kcal||0)/100),protein:r(g*d.p/100),fat:r(g*d.f/100),satfat:r(g*(d.sf||0)/100),carbs:r(g*d.c/100),sugar:r(g*(d.s||0)/100)};
 }
-function parseFood(raw){
-  let t=raw.toLowerCase().trim(),qty=null,unit=null;
 
-  // Extraer cantidad numérica o textual
-  for(const[k,v] of Object.entries(NUMS)){const re=new RegExp('\\b'+k+'\\b','i');if(re.test(t)){qty=v;t=t.replace(re,'').trim();break;}}
-  const nm=t.match(/^(\d+(?:[.,]\d+)?)\s*/);
-  if(nm){qty=parseFloat(nm[1].replace(',','.'));t=t.slice(nm[0].length).trim();}
-
-  // Detectar unidades estándar (g, kg, ml, etc.)
-  for(const u of UNITS){if(t.startsWith(u+' ')||t===u){unit=u;t=t.slice(u.length).trim();break;}}
-  if(!unit){const um=t.match(/\s+(g|gr|gramos|kg|ml|mililitros?|cl|dl|l|litros?)\b/i);if(um){unit=um[1].toLowerCase();t=t.replace(um[0],'').trim();}}
-
-  // Detectar medidas caseras (cucharada, vaso, taza...)
-  let measureGrams=null,measureName=null;
-  if(!unit){
-    const m=parseMeasure(t);
-    if(m){
-      measureName=m.measure;
-      measureGrams=m.grams;
-      t=m.rest;
-    }
-  }
-
-  t=t.replace(/^(de |la |el |los |las |un |una )/i,'').trim();
-  const found=dbLookup(t);
-  if(found){
-    const d=found.data;
-    let g,unitLabel;
-    if(unit==='kg'){g=(qty||1)*1000;unitLabel='g';}
-    else if(unit&&['ml','mililitro','mililitros','cl','centilitro','centilitros','dl','decilitro','decilitros','l','litro','litros'].includes(unit)){
-      // Para líquidos: ml ≈ g (densidad ~1)
-      const factor=unit==='cl'?10:unit==='dl'?100:(unit==='l'||unit==='litro'||unit==='litros')?1000:1;
-      g=(qty||1)*factor;unitLabel=unit;
-    }
-    else if(unit&&['g','gr','gramos'].includes(unit)){
-      g=qty||100;unitLabel='g';
-    }
-    else if(measureGrams!==null){
-      // Medida casera con gramos conocidos
-      g=(qty||1)*measureGrams;
-      unitLabel=(qty&&qty!==1?qty+' ':'')+measureName+'s';
-    }
-    else if(measureGrams===null&&measureName){
-      // Medida tipo "ración" → usar porción por defecto
-      g=(qty||1)*(d.por||100);unitLabel='ración';
-    }
-    else{
-      // Sin unidad → ración por defecto
-      g=(qty||1)*(d.por||100);qty=qty||1;unitLabel='ración';
-    }
-    return{name:raw,...macrosFromData(d,g),unitLabel};
-  }
-  return{name:raw,kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0,unknown:true};
+// ── AUTOCOMPLETE ──
+function allFoodNames(){
+  const builtin=Object.keys(DB).map(k=>({name:k,src:'db',data:DB[k]}));
+  const custom=customFoods.map(f=>({name:f.name,src:'custom',data:f}));
+  return[...custom,...builtin];
 }
-function splitIngredients(raw){
-  const result=[];
-  for(const part of raw.split(/,\s*/)){
-    if(!part.trim())continue;
-    const subs=part.split(/\s+(?:con|y|mas|más|\+)\s+/i);
-    subs.forEach(s=>{if(s.trim())result.push(s.trim());});
-  }
-  return result;
+function onFoodInput(val){
+  const v=norm(val.replace(/^\d+\s*(g|gr|gramos|kg|ml|cl|dl|l)?\s*/i,'').replace(/^(cucharadas?\s*(soperas?|postres?|grandes?|pequeñas?|cafe)?|cucharaditas?|vasos?\s*(grandes?|pequeños?)?|tazas?\s*(grandes?|cafe|te)?|tazones?|puñados?|cdtas?|cdas?)\s*(de\s+)?/i,''));
+  if(v.length<2){closeAC();return;}
+  const all=allFoodNames();
+  const matches=all.filter(f=>norm(f.name).includes(v)||normStem(f.name).includes(normStem(v))).slice(0,8);
+  if(!matches.length){closeAC();return;}
+  const list=document.getElementById('ac-list');
+  list.innerHTML=matches.map(m=>{
+    const d=m.data;
+    return`<div class="ac-item" onmousedown="pickAC('${m.name.replace(/'/g,"\\'")}'  )">
+      <span>${m.name}${m.src==='custom'?' ⭐':''}</span>
+      <small>${d.k||d.kcal||0} kcal · ${d.p}g prot · ${d.c}g carbs — por 100g · ración ${d.por}g</small>
+    </div>`;
+  }).join('');
+  list.style.display='block';
 }
+function pickAC(name){
+  const inp=document.getElementById('food-input');
+  const m=inp.value.match(/^(\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|kg|ml|cl|dl|l)?\s*|(?:cucharadas?\s*(?:soperas?|postres?|grandes?|pequeñas?|cafe)?|cucharaditas?|vasos?\s*(?:grandes?|pequeños?)?|tazas?\s*(?:grandes?|cafe|te)?|tazones?|puñados?|cdtas?|cdas?)\s*(?:de\s+)?)/i);
+  inp.value=(m?m[0]:'')+name;
+  closeAC();
+}
+function closeAC(){document.getElementById('ac-list').style.display='none';}
 
 // ── ADD FOOD ──
 function addFood(){
+  closeAC();
   const inp=document.getElementById('food-input');
   const raw=inp.value.trim();if(!raw)return;
   splitIngredients(raw).forEach(p=>{if(p)todayFoods.push(parseFood(p));});
-  inp.value='';closeAC();save();renderFoods();renderSummary();
+  inp.value='';save();renderFoods();renderSummary();
 }
 function addManual(){
   const name=document.getElementById('man-name').value.trim()||'Alimento manual';
@@ -1289,6 +1256,13 @@ function init(){
   renderFoods();renderSummary();
 }
 init();
+</script>
+<script>
+document.addEventListener('click', function(e){
+  const ac = document.getElementById('ac-list');
+  const inp = document.getElementById('food-input');
+  if(ac && !ac.contains(e.target) && e.target !== inp) closeAC();
+});
 </script>
 </body>
 </html>
