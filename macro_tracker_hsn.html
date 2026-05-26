@@ -563,7 +563,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
   <!-- Gráfico peso -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
     <div style="font-size:13px;font-weight:600;margin-bottom:12px">⚖️ Evolución del peso</div>
-    <canvas id="chart-peso" height="180"></canvas>
+    <div style="position:relative;height:220px;width:100%"><canvas id="chart-peso"></canvas></div>
     <div id="chart-peso-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin datos de peso en este período</div>
   </div>
 
@@ -571,21 +571,21 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
     <div style="font-size:13px;font-weight:600;margin-bottom:8px">📏 Medidas corporales</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="measure-toggles"></div>
-    <canvas id="chart-medidas" height="180"></canvas>
+    <div style="position:relative;height:220px;width:100%"><canvas id="chart-medidas"></canvas></div>
     <div id="chart-medidas-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin medidas en este período</div>
   </div>
 
   <!-- Gráfico proteína diaria -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
     <div style="font-size:13px;font-weight:600;margin-bottom:12px">🐟 Proteína diaria</div>
-    <canvas id="chart-prot" height="160"></canvas>
+    <div style="position:relative;height:200px;width:100%"><canvas id="chart-prot"></canvas></div>
     <div id="chart-prot-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin registros en este período</div>
   </div>
 
   <!-- Gráfico kcal diarias -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:1.25rem">
     <div style="font-size:13px;font-weight:600;margin-bottom:12px">⚡ Calorías diarias</div>
-    <canvas id="chart-kcal" height="160"></canvas>
+    <div style="position:relative;height:200px;width:100%"><canvas id="chart-kcal"></canvas></div>
     <div id="chart-kcal-empty" style="text-align:center;color:var(--text3);font-size:13px;padding:2rem 0;display:none">Sin registros en este período</div>
   </div>
 
@@ -2129,11 +2129,16 @@ function destroyChart(ref){ if(ref){ try{ref.destroy();}catch(e){} } return null
 
 function chartDefaults(){
   return {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+    responsive:true,
+    maintainAspectRatio:false,
+    animation:{duration:400},
+    plugins:{
+      legend:{display:false},
+      tooltip:{mode:'index',intersect:false}
+    },
     scales:{
-      x:{ticks:{maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}},
-      y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}
+      x:{ticks:{maxTicksLimit:8,font:{size:10},maxRotation:45},grid:{color:'rgba(128,128,128,0.08)'}},
+      y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.08)'},beginAtZero:false}
     }
   };
 }
