@@ -91,7 +91,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
 .add-tab.active{background:var(--text);color:var(--bg);border-color:var(--text);}
 .add-section{display:none;}.add-section.active{display:block;}
 .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-.mini-grid.three{grid-template-columns:1fr 1fr 1fr;}
+.mini-grid.three{grid-template-columns:repeat(3,minmax(0,1fr));}
 .field{display:flex;flex-direction:column;gap:4px;}
 .field label{font-size:11px;color:var(--text2);font-weight:500;}
 .field.full{grid-column:1/-1;}
@@ -175,6 +175,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
     <div class="add-tabs">
       <button class="add-tab active" onclick="switchAddTab('buscar')">🔍 Buscar</button>
       <button class="add-tab" onclick="switchAddTab('manual')">✏️ Manual (por 100g)</button>
+      <button class="add-tab" onclick="switchAddTab('plato')">🍽️ Plato combinado</button>
     </div>
 
     <!-- BUSCAR -->
@@ -195,7 +196,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
         <input type="text" id="man-name" placeholder="Ej: Flan Mercadona"/>
       </div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:500;">Valores por cada 100g:</div>
-      <div class="mini-grid three">
+      <div class="mini-grid">
         <div class="field"><label>Kcal</label><input type="number" id="man-kcal" placeholder="0" step="0.1"/></div>
         <div class="field"><label>Proteína (g)</label><input type="number" id="man-prot" placeholder="0" step="0.1"/></div>
         <div class="field"><label>Grasas (g)</label><input type="number" id="man-fat" placeholder="0" step="0.1"/></div>
@@ -209,6 +210,25 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
           <button class="btn btn-primary" style="flex:1" onclick="addManual()">+ Añadir</button>
           <button class="btn" style="flex:1" onclick="saveManualAsCustom()" title="Guardar en Mis alimentos">⭐ Guardar</button>
         </div>
+      </div>
+    </div>
+
+    <!-- PLATO COMBINADO -->
+    <div class="add-section" id="add-plato">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Añade los ingredientes del plato y calcula el total automáticamente.</div>
+      <div class="field" style="margin-bottom:8px">
+        <label>Nombre del plato</label>
+        <input type="text" id="plato-name" placeholder="Ej: Hamburguesa casera"/>
+      </div>
+      <div id="plato-ingredients" style="margin-bottom:8px"></div>
+      <div class="row" style="margin-bottom:8px">
+        <input type="text" id="plato-ing-input" placeholder="Añadir ingrediente: ej. 150g carne, 1 pan..." onkeydown="if(event.key==='Enter')addPlatoIngredient()"/>
+        <button class="btn" onclick="addPlatoIngredient()">+ Añadir</button>
+      </div>
+      <div id="plato-totals" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:10px;margin-bottom:8px;font-size:12px"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary" style="flex:1" onclick="addPlato()">🍽️ Añadir plato</button>
+        <button class="btn" onclick="savePlatoAsCustom()">⭐ Guardar plato</button>
       </div>
     </div>
   </div>
@@ -300,6 +320,14 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       <div class="field"><label>Azúcares (g)</label><input type="number" id="myf-sugar" placeholder="0" step="0.1"/></div>
     </div>
     <div class="field" style="margin-top:8px;margin-bottom:10px"><label>Ración típica (g) — opcional</label><input type="number" id="myf-portion" placeholder="Ej: 125"/></div>
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;margin-top:4px">Medidas personalizadas — opcional</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Define tus propias unidades (ej: "loncha"=3g, "rodaja"=20g). Luego puedes poner "4 lonchas fuet".</div>
+    <div id="myf-custom-measures" style="margin-bottom:6px"></div>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="myf-mname" placeholder='Nombre (ej: "loncha")' style="flex:2"/>
+      <input type="number" id="myf-mgrams" placeholder="g" style="flex:1;min-width:60px"/>
+      <button class="btn" onclick="addCustomMeasure()">+ Añadir</button>
+    </div>
     <button class="btn btn-primary btn-full" onclick="saveCustomFood()">⭐ Guardar alimento</button>
   </div>
   <div class="mhist-title">Mis alimentos guardados</div>
@@ -625,13 +653,10 @@ function parseFood(raw){
   }
 
   // 4. Medida casera
-  console.log('BEFORE parseMeasure: t='+JSON.stringify(t)+' qty='+qty);
   const m = parseMeasure(t);
-  console.log('parseMeasure result:', JSON.stringify(m));
   if(m){
     t = m.foodText;
     const found = dbLookup(t);
-    console.log('dbLookup("'+t+'") =', found ? 'FOUND:'+found.src : 'NOT FOUND');
     if(found){
       const d = found.data;
       const gramsPerMeasure = m.grams !== null ? m.grams : (d.por||100);
@@ -677,6 +702,7 @@ function load(){
     if(s){const o=JSON.parse(s);dailyLog=o.dailyLog||{};measures=o.measures||[];cfg=Object.assign({},DEFAULT_CFG,o.cfg||{});customFoods=o.customFoods||[];}
     const tf=localStorage.getItem('mth_today_'+tKey());if(tf)todayFoods=JSON.parse(tf);
     driveFileId=localStorage.getItem('mth_drive_fid')||null;
+    reregisterAllCustomMeasures();
   }catch(e){}
 }
 function save(){
@@ -757,6 +783,15 @@ function addManual(){
   const g=parseFloat(document.getElementById('man-grams').value)||100;
   const d={k:parseFloat(document.getElementById('man-kcal').value)||0,p:parseFloat(document.getElementById('man-prot').value)||0,f:parseFloat(document.getElementById('man-fat').value)||0,sf:parseFloat(document.getElementById('man-satfat').value)||0,c:parseFloat(document.getElementById('man-carb').value)||0,s:parseFloat(document.getElementById('man-sugar').value)||0};
   todayFoods.push({name:`${name} (${g}g)`,...macrosFromData(d,g)});
+  // Auto-guardar si tiene nombre personalizado
+  const hasName = document.getElementById('man-name').value.trim();
+  if(hasName){
+    const existing = customFoods.find(f=>f.name.toLowerCase()===hasName.toLowerCase());
+    if(!existing){
+      customFoods.push({id:'cf_'+Date.now(),name:hasName,k:d.k,p:d.p,f:d.f,sf:d.sf,c:d.c,s:d.s,por:g});
+      renderCustomFoods();
+    }
+  }
   save();renderFoods();renderSummary();
   ['man-name','man-kcal','man-prot','man-fat','man-satfat','man-carb','man-sugar','man-grams'].forEach(id=>document.getElementById(id).value='');
 }
@@ -1231,6 +1266,177 @@ function deleteDay(){
   if(!confirm('¿Borrar el registro de este día?')) return;
   delete dailyLog[editingKey];
   save(); renderCalendar(); closeEditModal();
+}
+
+
+// ── CUSTOM MEASURES ──
+let tempCustomMeasures = [];
+
+function addCustomMeasure(){
+  const mname = document.getElementById('myf-mname').value.trim();
+  const mgrams = parseFloat(document.getElementById('myf-mgrams').value);
+  if(!mname||!mgrams){alert('Pon nombre y gramos');return;}
+  tempCustomMeasures.push({name:mname, grams:mgrams});
+  document.getElementById('myf-mname').value='';
+  document.getElementById('myf-mgrams').value='';
+  renderTempMeasures();
+}
+
+function removeTempMeasure(i){
+  tempCustomMeasures.splice(i,1);
+  renderTempMeasures();
+}
+
+function renderTempMeasures(){
+  const el = document.getElementById('myf-custom-measures');
+  if(!tempCustomMeasures.length){el.innerHTML='';return;}
+  el.innerHTML = tempCustomMeasures.map((m,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:4px;font-size:12px">
+      <span>1 ${m.name} = ${m.grams}g</span>
+      <button class="btn btn-danger btn-sm" style="padding:2px 6px" onclick="removeTempMeasure(${i})">✕</button>
+    </div>`).join('');
+}
+
+function registerCustomMeasures(food){
+  if(!food.measures) return;
+  for(const m of food.measures){
+    const key = norm(m.name+' '+food.name);
+    MEASURES[key] = m.grams;
+    MEASURES[norm(m.name)+'s '+norm(food.name)] = m.grams;
+  }
+}
+
+function reregisterAllCustomMeasures(){
+  for(const f of customFoods) registerCustomMeasures(f);
+}
+
+// ── PLATO COMBINADO ──
+let platoIngredients = [];
+
+function addPlatoIngredient(){
+  const inp = document.getElementById('plato-ing-input');
+  const raw = inp.value.trim(); if(!raw) return;
+  const parsed = parseFood(raw);
+  platoIngredients.push(parsed);
+  inp.value = '';
+  renderPlatoIngredients();
+}
+
+function removePlatoIngredient(i){
+  platoIngredients.splice(i,1);
+  renderPlatoIngredients();
+}
+
+function renderPlatoIngredients(){
+  const el = document.getElementById('plato-ingredients');
+  const totEl = document.getElementById('plato-totals');
+  if(!platoIngredients.length){ el.innerHTML=''; totEl.style.display='none'; return; }
+  el.innerHTML = platoIngredients.map((f,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:.5px solid var(--border);font-size:12px">
+      <span style="flex:1;font-weight:500">${f.name}</span>
+      <div style="display:flex;gap:4px;align-items:center">
+        ${f.unknown?'<span style="color:var(--text3)">sin datos</span>':`
+          <span class="pill p-kcal" style="font-size:10px">${f.kcal}kcal</span>
+          <span class="pill p-prot" style="font-size:10px">${f.protein}g P</span>
+          <span class="pill p-carb" style="font-size:10px">${f.carbs}g C</span>`}
+        <button class="btn btn-danger btn-sm" style="padding:2px 6px" onclick="removePlatoIngredient(${i})">✕</button>
+      </div>
+    </div>`).join('');
+  const r = x => Math.round(x*10)/10;
+  const tot = {kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0};
+  for(const f of platoIngredients) if(!f.unknown){
+    tot.kcal+=f.kcal||0; tot.protein+=f.protein||0; tot.fat+=f.fat||0;
+    tot.satfat+=f.satfat||0; tot.carbs+=f.carbs||0; tot.sugar+=f.sugar||0;
+  }
+  totEl.style.display='block';
+  totEl.innerHTML=`<div style="font-weight:600;margin-bottom:4px;font-size:12px">Total del plato:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">
+      <span class="pill p-kcal">${r(tot.kcal)} kcal</span>
+      <span class="pill p-prot">${r(tot.protein)}g prot</span>
+      <span class="pill p-fat">${r(tot.fat)}g grasa</span>
+      <span class="pill p-satfat">${r(tot.satfat)}g sat</span>
+      <span class="pill p-carb">${r(tot.carbs)}g carbs</span>
+      <span class="pill p-sugar">${r(tot.sugar)}g azucar</span>
+    </div>`;
+}
+
+function addPlato(){
+  if(!platoIngredients.length){alert('Añade al menos un ingrediente');return;}
+  const name = document.getElementById('plato-name').value.trim() || 'Plato combinado';
+  const r = x => Math.round(x*10)/10;
+  const tot = {kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0};
+  for(const f of platoIngredients) if(!f.unknown){
+    tot.kcal+=f.kcal||0; tot.protein+=f.protein||0; tot.fat+=f.fat||0;
+    tot.satfat+=f.satfat||0; tot.carbs+=f.carbs||0; tot.sugar+=f.sugar||0;
+  }
+  todayFoods.push({name, kcal:r(tot.kcal), protein:r(tot.protein), fat:r(tot.fat), satfat:r(tot.satfat), carbs:r(tot.carbs), sugar:r(tot.sugar)});
+  platoIngredients=[];
+  document.getElementById('plato-name').value='';
+  renderPlatoIngredients();
+  save();renderFoods();renderSummary();
+  switchAddTab('buscar');
+}
+
+function savePlatoAsCustom(){
+  if(!platoIngredients.length){alert('Añade al menos un ingrediente');return;}
+  const name = document.getElementById('plato-name').value.trim();
+  if(!name){alert('Ponle un nombre al plato');return;}
+  const r = x => Math.round(x*10)/10;
+  const tot = {kcal:0,protein:0,fat:0,satfat:0,carbs:0,sugar:0};
+  let totalG = 0;
+  for(const f of platoIngredients) if(!f.unknown){
+    tot.kcal+=f.kcal||0; tot.protein+=f.protein||0; tot.fat+=f.fat||0;
+    tot.satfat+=f.satfat||0; tot.carbs+=f.carbs||0; tot.sugar+=f.sugar||0;
+  }
+  totalG = platoIngredients.reduce((s,f)=>{const m=f.name.match(/[(](\d+)g[)]/);return s+(m?parseInt(m[1]):100);},0)||100;
+  const p100 = g => r(g/totalG*100);
+  customFoods.push({id:'cf_'+Date.now(), name,
+    k:p100(tot.kcal), p:p100(tot.protein), f:p100(tot.fat),
+    sf:p100(tot.satfat), c:p100(tot.carbs), s:p100(tot.sugar), por:totalG});
+  save(); renderCustomFoods();
+  alert('Plato "'+name+'" guardado en Mis alimentos');
+}
+
+// ── SAVE CUSTOM FOOD ──
+function saveCustomFood(){
+  const name=document.getElementById('myf-name').value.trim();
+  if(!name){alert('Pon un nombre al alimento');return;}
+  const food={
+    id:'cf_'+Date.now(),name,
+    k:parseFloat(document.getElementById('myf-kcal').value)||0,
+    p:parseFloat(document.getElementById('myf-prot').value)||0,
+    f:parseFloat(document.getElementById('myf-fat').value)||0,
+    sf:parseFloat(document.getElementById('myf-satfat').value)||0,
+    c:parseFloat(document.getElementById('myf-carb').value)||0,
+    s:parseFloat(document.getElementById('myf-sugar').value)||0,
+    por:parseFloat(document.getElementById('myf-portion').value)||100,
+    measures:tempCustomMeasures.length?[...tempCustomMeasures]:undefined,
+  };
+  customFoods.push(food);
+  registerCustomMeasures(food);
+  save();renderCustomFoods();
+  ['myf-name','myf-kcal','myf-prot','myf-fat','myf-satfat','myf-carb','myf-sugar','myf-portion'].forEach(id=>document.getElementById(id).value='');
+  tempCustomMeasures=[];renderTempMeasures();
+  alert('Alimento guardado en Mis alimentos');
+}
+
+
+function deleteCustomFood(id){customFoods=customFoods.filter(f=>f.id!==id);save();renderCustomFoods();}
+function renderCustomFoods(){
+  const el=document.getElementById('myf-list');
+  if(!customFoods.length){el.innerHTML='<div class="empty">Aún no tienes alimentos guardados</div>';return;}
+  el.innerHTML=customFoods.map(f=>`
+    <div class="myf-card">
+      <div class="myf-top"><span class="myf-name">${f.name}</span><button class="btn btn-danger btn-sm" onclick="deleteCustomFood('${f.id}')">🗑️</button></div>
+      <div class="pills">
+        <span class="pill p-kcal">${f.k||0} kcal/100g</span>
+        <span class="pill p-prot">${f.p||0}g prot</span>
+        <span class="pill p-fat">${f.f||0}g grasa</span>
+        <span class="pill p-carb">${f.c||0}g carbs</span>
+        <span style="font-size:11px;color:var(--text3)">Ración: ${f.por||100}g</span>
+        ${f.measures&&f.measures.length?'<span style="font-size:11px;color:var(--blue)">📐 '+f.measures.map(m=>'1 '+m.name+'='+m.grams+'g').join(', ')+'</span>':''}
+      </div>
+    </div>`).join('');
 }
 
 // ── TABS ──
