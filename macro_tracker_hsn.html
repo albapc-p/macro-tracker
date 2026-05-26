@@ -220,6 +220,10 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
         <label>Nombre del plato</label>
         <input type="text" id="plato-name" placeholder="Ej: Hamburguesa casera"/>
       </div>
+      <div class="field" style="margin-bottom:8px">
+        <label>Descripción — opcional</label>
+        <textarea id="plato-desc" placeholder="Ej: Versión casera con pan integral..." rows="2" style="padding:8px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;width:100%"></textarea>
+      </div>
       <div id="plato-ingredients" style="margin-bottom:8px"></div>
       <div class="row" style="margin-bottom:8px">
         <input type="text" id="plato-ing-input" placeholder="Añadir ingrediente: ej. 150g carne, 1 pan..." onkeydown="if(event.key==='Enter')addPlatoIngredient()"/>
@@ -328,6 +332,20 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       <input type="number" id="myf-mgrams" placeholder="g" style="flex:1;min-width:60px"/>
       <button class="btn" onclick="addCustomMeasure()">+ Añadir</button>
     </div>
+    <div class="field" style="margin-top:8px;margin-bottom:8px">
+      <label>Descripción — opcional</label>
+      <textarea id="myf-desc" placeholder="Ej: Sin lactosa, lo compro en Mercadona, lleva nueces..." rows="2" style="padding:8px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;width:100%"></textarea>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label>Foto — opcional</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-sm" onclick="document.getElementById('myf-photo-input').click()">📷 Añadir foto</button>
+        <span id="myf-photo-name" style="font-size:12px;color:var(--text3)">Sin foto</span>
+        <button class="btn btn-sm btn-danger" id="myf-photo-clear" onclick="clearMyfPhoto()" style="display:none">✕</button>
+      </div>
+      <input type="file" id="myf-photo-input" accept="image/*" style="display:none" onchange="onMyfPhoto(event)"/>
+      <img id="myf-photo-preview" style="display:none;max-width:100%;max-height:120px;border-radius:var(--radius-sm);margin-top:6px;object-fit:cover"/>
+    </div>
     <button class="btn btn-primary btn-full" onclick="saveCustomFood()">⭐ Guardar alimento</button>
   </div>
   <div class="mhist-title">Mis alimentos guardados</div>
@@ -397,6 +415,20 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
     </div>
   </div>
   <div id="guia-list"></div>
+
+  <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">📚 Fuentes y referencias</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.8;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px">
+      Los valores nutricionales de esta app están basados en las siguientes fuentes oficiales:<br><br>
+      <b>🇪🇸 BEDCA</b> — Base de Datos Española de Composición de Alimentos. Fuente principal para alimentos de consumo habitual en España. Coordinada por el Ministerio de Sanidad.<br>
+      <a href="https://www.bedca.net" target="_blank" style="color:var(--blue)">www.bedca.net</a><br><br>
+      <b>🇺🇸 USDA FoodData Central</b> — Base de datos del Departamento de Agricultura de EE.UU. La más completa del mundo, referencia internacional para composición de alimentos.<br>
+      <a href="https://fdc.nal.usda.gov" target="_blank" style="color:var(--blue)">fdc.nal.usda.gov</a><br><br>
+      <b>🇫🇷 CIQUAL (ANSES)</b> — Tabla de composición nutricional de alimentos francesa, ampliamente usada en Europa.<br>
+      <a href="https://ciqual.anses.fr" target="_blank" style="color:var(--blue)">ciqual.anses.fr</a><br><br>
+      <b>⚠️ Importante:</b> Los valores son <i>estimaciones medias de referencia</i>. Pueden variar según la variedad, origen, método de cocción y marca del alimento. Para productos envasados, la etiqueta nutricional del fabricante siempre es más precisa. Para alimentos frescos (carnes, frutas, verduras), las variaciones son habitualmente menores al 10-15%.
+    </div>
+  </div>
 </div>
 <!-- MODAL DÍA -->
 <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:flex-start;justify-content:center;padding:1rem;overflow-y:auto">
@@ -710,6 +742,15 @@ function save(){
     localStorage.setItem('mth_state',JSON.stringify({dailyLog,measures,cfg,customFoods}));
     localStorage.setItem('mth_today_'+tKey(),JSON.stringify(todayFoods));
   }catch(e){}
+  autoDriveSave();
+}
+let _driveAutoTimer=null;
+function autoDriveSave(){
+  if(!driveToken) return;
+  clearTimeout(_driveAutoTimer);
+  _driveAutoTimer=setTimeout(()=>{
+    driveSave(true); // silent=true
+  },3000); // debounce 3s
 }
 
 // ── DB LOOKUP ──
@@ -1006,7 +1047,7 @@ function setDriveUI(ok){
   document.getElementById('cfg-save-btn').style.display=ok?'':'none';
   document.getElementById('cfg-load-btn').style.display=ok?'':'none';
 }
-async function driveSave(){
+async function driveSave(silent=false){
   if(!driveToken){alert('Conecta primero con Drive');return;}
   const data=JSON.stringify({dailyLog,measures,cfg,customFoods,todayFoods});
   try{
@@ -1020,7 +1061,8 @@ async function driveSave(){
     }
     const json=await res.json();
     if(json.id){driveFileId=json.id;localStorage.setItem('mth_drive_fid',json.id);}
-    alert('✅ Guardado en Google Drive');
+    if(!silent) alert('✅ Guardado en Google Drive');
+    else{ document.getElementById('drive-label').textContent='Google Drive: guardado ✓ '+new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}); }
   }catch(e){alert('Error: '+e.message);}
 }
 async function driveLoad(){
@@ -1269,6 +1311,40 @@ function deleteDay(){
 }
 
 
+
+// ── CUSTOM FOOD PHOTO ──
+let myfPhotoB64 = null;
+function onMyfPhoto(e){
+  const file = e.target.files[0]; if(!file) return;
+  // Resize to max 400px to keep storage small
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxW = 400;
+      const scale = Math.min(1, maxW/img.width);
+      canvas.width = img.width*scale; canvas.height = img.height*scale;
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      myfPhotoB64 = canvas.toDataURL('image/jpeg',0.7);
+      document.getElementById('myf-photo-preview').src = myfPhotoB64;
+      document.getElementById('myf-photo-preview').style.display = 'block';
+      document.getElementById('myf-photo-name').textContent = file.name;
+      document.getElementById('myf-photo-clear').style.display = '';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clearMyfPhoto(){
+  myfPhotoB64=null;
+  document.getElementById('myf-photo-preview').style.display='none';
+  document.getElementById('myf-photo-preview').src='';
+  document.getElementById('myf-photo-name').textContent='Sin foto';
+  document.getElementById('myf-photo-clear').style.display='none';
+  document.getElementById('myf-photo-input').value='';
+}
+
 // ── CUSTOM MEASURES ──
 let tempCustomMeasures = [];
 
@@ -1390,9 +1466,11 @@ function savePlatoAsCustom(){
   }
   totalG = platoIngredients.reduce((s,f)=>{const m=f.name.match(/[(](\d+)g[)]/);return s+(m?parseInt(m[1]):100);},0)||100;
   const p100 = g => r(g/totalG*100);
+  const platoDesc = document.getElementById('plato-desc')?.value.trim()||undefined;
   customFoods.push({id:'cf_'+Date.now(), name,
     k:p100(tot.kcal), p:p100(tot.protein), f:p100(tot.fat),
-    sf:p100(tot.satfat), c:p100(tot.carbs), s:p100(tot.sugar), por:totalG});
+    sf:p100(tot.satfat), c:p100(tot.carbs), s:p100(tot.sugar), por:totalG,
+    desc:platoDesc});
   save(); renderCustomFoods();
   alert('Plato "'+name+'" guardado en Mis alimentos');
 }
@@ -1411,11 +1489,15 @@ function saveCustomFood(){
     s:parseFloat(document.getElementById('myf-sugar').value)||0,
     por:parseFloat(document.getElementById('myf-portion').value)||100,
     measures:tempCustomMeasures.length?[...tempCustomMeasures]:undefined,
+    desc:document.getElementById('myf-desc').value.trim()||undefined,
+    photo:myfPhotoB64||undefined,
   };
   customFoods.push(food);
   registerCustomMeasures(food);
   save();renderCustomFoods();
   ['myf-name','myf-kcal','myf-prot','myf-fat','myf-satfat','myf-carb','myf-sugar','myf-portion'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('myf-desc').value='';
+  clearMyfPhoto();
   tempCustomMeasures=[];renderTempMeasures();
   alert('Alimento guardado en Mis alimentos');
 }
@@ -1427,7 +1509,9 @@ function renderCustomFoods(){
   if(!customFoods.length){el.innerHTML='<div class="empty">Aún no tienes alimentos guardados</div>';return;}
   el.innerHTML=customFoods.map(f=>`
     <div class="myf-card">
+      ${f.photo?`<img src="${f.photo}" style="width:100%;max-height:120px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:8px"/>`:'' }
       <div class="myf-top"><span class="myf-name">${f.name}</span><button class="btn btn-danger btn-sm" onclick="deleteCustomFood('${f.id}')">🗑️</button></div>
+      ${f.desc?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${f.desc}</div>`:''}
       <div class="pills">
         <span class="pill p-kcal">${f.k||0} kcal/100g</span>
         <span class="pill p-prot">${f.p||0}g prot</span>
