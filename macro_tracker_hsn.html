@@ -1320,6 +1320,7 @@ function openEditModal(key){
       <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
         <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Proteína comida</div>
         <div style="font-size:18px;font-weight:700;color:var(--blue)">${l.protein||0}g</div>
+        ${l.hsnTaken&&l.hsnG?`<div style="font-size:10px;color:var(--green);margin-top:2px;font-weight:600">+ ${Math.round(l.hsnG*0.92*10)/10}g HSN = <b>${Math.round(((l.protein||0)+(l.hsnG||0)*0.92)*10)/10}g total</b></div>`:''}
       </div>
       <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px;text-align:center">
         <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Kcal</div>
