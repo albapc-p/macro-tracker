@@ -446,7 +446,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
         <button class="btn btn-sm" id="modal-btn-foods" onclick="showModalFoods()" style="flex:1">🍽️ Alimentos</button>
         <button class="btn btn-sm" id="modal-btn-measures" onclick="showModalMeasures()" style="flex:1">📏 Medidas</button>
-        <button class="btn btn-sm" onclick="showModalEdit()" style="flex:1">✏️ Editar</button>
+        <button class="btn btn-sm" id="modal-btn-edit-foods" onclick="showModalEditFoods()" style="flex:1">✏️ Editar día</button>
         <button class="btn btn-sm btn-danger" onclick="deleteDay()">🗑️</button>
       </div>
       <!-- Alimentos subview -->
@@ -459,6 +459,34 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
       <div id="modal-sub-measures" style="display:none">
         <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Medidas corporales</div>
         <div id="modal-measures-content"></div>
+      </div>
+      <!-- Editar alimentos subview -->
+      <div id="modal-sub-edit-foods" style="display:none">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Editar alimentos del día</div>
+        <!-- HSN toggle -->
+        <div id="modal-hsn-row" style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--blue)">💊 Proteína HSN</div>
+            <div style="font-size:11px;color:var(--text2)" id="modal-hsn-desc">—</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" id="modal-hsn-g-input" placeholder="g polvo" step="0.1" style="width:80px;padding:5px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:13px"/>
+            <button id="modal-hsn-toggle" onclick="toggleModalHsn()" style="padding:5px 12px;border-radius:99px;border:2px solid var(--blue);background:transparent;color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Marcar tomado</button>
+          </div>
+        </div>
+        <!-- Add food row -->
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="modal-add-food-input" placeholder="Añadir: ej. 2 huevos, 150g arroz..." onkeydown="if(event.key==='Enter')modalAddFood()"/>
+          <button class="btn btn-primary" onclick="modalAddFood()">+ Añadir</button>
+        </div>
+        <!-- Food list for this day -->
+        <div id="modal-edit-food-list" style="max-height:250px;overflow-y:auto;margin-bottom:10px"></div>
+        <!-- Totals summary -->
+        <div id="modal-edit-totals" style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveModalFoods()">💾 Guardar cambios</button>
+          <button class="btn" onclick="showModalFoods()">← Ver</button>
+        </div>
       </div>
     </div>
 
@@ -1628,6 +1656,145 @@ function renderCustomFoods(){
         ${f.measures&&f.measures.length?'<span style="font-size:11px;color:var(--blue)">📐 '+f.measures.map(m=>'1 '+m.name+'='+m.grams+'g').join(', ')+'</span>':''}
       </div>
     </div>`).join('');
+}
+
+
+// ── MODAL EDIT FOODS ──
+let modalEditFoods = [];
+let modalHsnTaken = false;
+let modalHsnG = 0;
+
+function showModalEditFoods(){
+  // Hide other subviews
+  document.getElementById('modal-sub-foods').style.display='none';
+  document.getElementById('modal-sub-measures').style.display='none';
+  document.getElementById('modal-sub-edit-foods').style.display='block';
+  // Highlight button
+  ['modal-btn-foods','modal-btn-measures','modal-btn-edit-foods'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.fontWeight=id==='modal-btn-edit-foods'?'700':'400';el.style.background=id==='modal-btn-edit-foods'?'var(--surface2)':'';}
+  });
+  // Load current foods for this day
+  const l = dailyLog[editingKey];
+  modalEditFoods = l && l.foods ? JSON.parse(JSON.stringify(l.foods)) : [];
+  modalHsnTaken = l ? (l.hsnTaken||false) : false;
+  modalHsnG = l ? (l.hsnG||0) : 0;
+  renderModalEditFoods();
+  updateModalHsnUI();
+}
+
+function updateModalHsnUI(){
+  const btn = document.getElementById('modal-hsn-toggle');
+  const inp = document.getElementById('modal-hsn-g-input');
+  const desc = document.getElementById('modal-hsn-desc');
+  if(!btn||!inp) return;
+  inp.value = modalHsnG||'';
+  if(modalHsnTaken){
+    btn.style.background='var(--green)';btn.style.borderColor='var(--green)';btn.style.color='#fff';
+    btn.textContent='✓ Tomado';
+    desc.textContent=`${modalHsnG}g de polvo → ${Math.round(modalHsnG*HSN*10)/10}g proteína`;
+  } else {
+    btn.style.background='transparent';btn.style.borderColor='var(--blue)';btn.style.color='var(--blue)';
+    btn.textContent='Marcar tomado';
+    desc.textContent='Indica cuánto tomaste de polvo HSN';
+  }
+}
+
+function toggleModalHsn(){
+  const inp = document.getElementById('modal-hsn-g-input');
+  const g = parseFloat(inp.value)||0;
+  modalHsnG = g;
+  modalHsnTaken = !modalHsnTaken;
+  if(modalHsnTaken && !g){
+    // Auto-calculate needed
+    const t = calcTotals(modalEditFoods);
+    modalHsnG = Math.round(Math.max(0,cfg.prot-t.protein)/HSN*10)/10;
+    inp.value = modalHsnG;
+  }
+  updateModalHsnUI();
+  renderModalEditTotals();
+}
+
+function calcTotals(foods){
+  return ['kcal','protein','fat','satfat','carbs','sugar'].reduce((a,k)=>{
+    a[k]=foods.reduce((s,f)=>s+(f.unknown?0:(f[k]||0)),0); return a;
+  },{});
+}
+
+function renderModalEditFoods(){
+  const el = document.getElementById('modal-edit-food-list');
+  if(!modalEditFoods.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:8px 0">Sin alimentos. Añade usando el campo de arriba.</div>';
+  } else {
+    el.innerHTML = modalEditFoods.map((f,i)=>`
+      <div style="display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:.5px solid var(--border);font-size:12px">
+        <span style="flex:1;font-weight:500">${f.name}</span>
+        <div style="display:flex;flex-wrap:wrap;gap:3px">
+          ${f.unknown?'<span style="color:var(--text3)">sin datos</span>':`
+            <span class="pill p-kcal" style="font-size:10px">${f.kcal}kcal</span>
+            <span class="pill p-prot" style="font-size:10px">${f.protein}g P</span>
+            <span class="pill p-carb" style="font-size:10px">${f.carbs}g C</span>`}
+        </div>
+        <button class="btn btn-danger btn-sm" style="padding:2px 6px;flex-shrink:0" onclick="modalRemoveFood(${i})">✕</button>
+      </div>`).join('');
+  }
+  renderModalEditTotals();
+}
+
+function renderModalEditTotals(){
+  const el = document.getElementById('modal-edit-totals');
+  const t = calcTotals(modalEditFoods);
+  const r = x=>Math.round(x*10)/10;
+  const hsnProt = modalHsnTaken ? Math.round(modalHsnG*HSN*10)/10 : 0;
+  const totalProt = r(t.protein + hsnProt);
+  const met = totalProt >= cfg.prot;
+  el.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+    <b style="font-size:11px;color:var(--text2);margin-right:4px">Total:</b>
+    <span class="pill p-kcal" style="font-size:10px">${r(t.kcal)} kcal</span>
+    <span class="pill p-prot" style="font-size:10px">${r(t.protein)}g prot${hsnProt?'+'+hsnProt+'g HSN':''}</span>
+    <span class="pill p-carb" style="font-size:10px">${r(t.carbs)}g carbs</span>
+    <span class="pill p-fat" style="font-size:10px">${r(t.fat)}g grasa</span>
+    <span style="font-size:11px;font-weight:600;color:${met?'var(--green)':'var(--red)'}">${met?'✅ Objetivo cumplido':'❌ Sin objetivo'}</span>
+  </div>`;
+}
+
+function modalAddFood(){
+  const inp = document.getElementById('modal-add-food-input');
+  const raw = inp.value.trim(); if(!raw) return;
+  splitIngredients(raw).forEach(p=>{if(p) modalEditFoods.push(parseFood(p));});
+  inp.value='';
+  renderModalEditFoods();
+}
+
+function modalRemoveFood(i){
+  modalEditFoods.splice(i,1);
+  renderModalEditFoods();
+}
+
+function saveModalFoods(){
+  const t = calcTotals(modalEditFoods);
+  const r = x=>Math.round(x*10)/10;
+  const hsnProt = modalHsnTaken ? Math.round(modalHsnG*HSN*10)/10 : 0;
+  const totalProt = r(t.protein + hsnProt);
+  const met = totalProt >= cfg.prot;
+  const existing = dailyLog[editingKey]||{};
+  dailyLog[editingKey] = {
+    ...existing,
+    protein: r(t.protein),
+    kcal: Math.round(t.kcal),
+    carbs: r(t.carbs),
+    fat: r(t.fat),
+    sugar: r(t.sugar),
+    met,
+    hsnTaken: modalHsnTaken,
+    hsnG: modalHsnG,
+    foods: [...modalEditFoods],
+  };
+  save();
+  renderCalendar();
+  // Refresh summary view
+  openEditModal(editingKey);
+  showModalFoods();
 }
 
 // ── TABS ──
