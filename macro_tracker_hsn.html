@@ -1099,8 +1099,27 @@ function logToday(){
   const totalProt = t.protein + (hsnTaken ? hsnG2*HSN : 0);
   const met = totalProt >= cfg.prot;
   dailyLog[key]={protein:Math.round(t.protein*10)/10,kcal:Math.round(t.kcal),carbs:Math.round(t.carbs*10)/10,fat:Math.round(t.fat*10)/10,sugar:Math.round(t.sugar*10)/10,met,hsnTaken,hsnG:hsnTaken?Math.round(hsnG2*10)/10:0,foods:[...todayFoods]};
-  save();renderCalendar();
-  alert(t.protein>=cfg.prot?`✅ ¡Objetivo cumplido! ${Math.round(t.protein*10)/10}g proteína`:`📝 Registrado: ${Math.round(t.protein*10)/10}g prot · ${Math.round(t.kcal)} kcal`);
+  // Clear today's foods from view — they're saved in dailyLog
+  // On a new day init() will start fresh automatically via tKey()
+  todayFoods=[];
+  localStorage.removeItem('mth_today_'+key);
+  save();renderCalendar();renderFoods();renderSummary();
+  // Show success without alert — use a toast instead
+  showToast(totalProt>=cfg.prot?'✅ ¡Día registrado! Objetivo cumplido':'📝 Día registrado. Sigue añadiendo si quieres.');
+}
+
+function showToast(msg){
+  let toast=document.getElementById('app-toast');
+  if(!toast){
+    toast=document.createElement('div');
+    toast.id='app-toast';
+    toast.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 20px;border-radius:99px;font-size:13px;font-weight:500;z-index:9999;transition:opacity .3s;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    document.body.appendChild(toast);
+  }
+  toast.textContent=msg;
+  toast.style.opacity='1';
+  clearTimeout(toast._timer);
+  toast._timer=setTimeout(()=>toast.style.opacity='0',3000);
 }
 
 // ── ADD PANEL TABS ──
