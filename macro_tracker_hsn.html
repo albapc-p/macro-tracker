@@ -1098,28 +1098,16 @@ function logToday(){
   const hsnG2 = Math.max(0,cfg.prot-t.protein)/HSN;
   const totalProt = t.protein + (hsnTaken ? hsnG2*HSN : 0);
   const met = totalProt >= cfg.prot;
-  // Merge with previously saved foods for today (in case user registers multiple times)
-  const prevFoods = (dailyLog[key]&&dailyLog[key].foods) ? dailyLog[key].foods : [];
-  const mergedFoods = [...prevFoods, ...todayFoods];
-  // Recalculate totals from ALL merged foods
   const r = x=>Math.round(x*10)/10;
-  const allTots = ['kcal','protein','fat','satfat','carbs','sugar'].reduce((a,k)=>{
-    a[k]=mergedFoods.reduce((s,f)=>s+(f.unknown?0:(f[k]||0)),0); return a;
-  },{});
-  const hsnG3 = Math.max(0,cfg.prot-allTots.protein)/HSN;
-  const totalProtFinal = allTots.protein + (hsnTaken ? Math.min(hsnG2,hsnG3)*HSN : 0);
-  const metFinal = totalProtFinal >= cfg.prot;
+  // Save snapshot — todayFoods stays visible all day, clears automatically at midnight
   dailyLog[key]={
-    protein:r(allTots.protein), kcal:Math.round(allTots.kcal),
-    carbs:r(allTots.carbs), fat:r(allTots.fat), sugar:r(allTots.sugar),
-    met:metFinal, hsnTaken, hsnG:hsnTaken?Math.round(hsnG2*10)/10:0,
-    foods:mergedFoods
+    protein:r(t.protein), kcal:Math.round(t.kcal),
+    carbs:r(t.carbs), fat:r(t.fat), sugar:r(t.sugar),
+    met, hsnTaken, hsnG:hsnTaken?Math.round(hsnG2*10)/10:0,
+    foods:[...todayFoods]
   };
-  // Clear today's new foods — merged ones are safe in dailyLog
-  todayFoods=[];
-  localStorage.removeItem('mth_today_'+key);
-  save();renderCalendar();renderFoods();renderSummary();
-  showToast(metFinal?'✅ ¡Día registrado! Objetivo cumplido':'📝 Día registrado. Sigue añadiendo si quieres.');
+  save();renderCalendar();
+  showToast(met?'✅ ¡Día registrado! Objetivo cumplido':'📝 Día registrado correctamente');
 }
 
 function showToast(msg){
