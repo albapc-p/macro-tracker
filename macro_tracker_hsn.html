@@ -1738,8 +1738,8 @@ let platoIngredients = [];
 function addPlatoIngredient(){
   const inp = document.getElementById('plato-ing-input');
   const raw = inp.value.trim(); if(!raw) return;
-  const parsed = parseFood(raw);
-  platoIngredients.push(parsed);
+  // Split by comma to allow "200g pan, 60g queso, 60g jamon"
+  splitIngredients(raw).forEach(p=>{ if(p.trim()) platoIngredients.push(parseFood(p.trim())); });
   inp.value = '';
   renderPlatoIngredients();
 }
